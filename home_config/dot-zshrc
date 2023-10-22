@@ -1,0 +1,15 @@
+unsetopt BEEP
+
+# Enable Git autocompletion
+autoload -Uz compinit && compinit
+
+# Oh My Posh
+if [ "$TERM_PROGRAM" != "Apple_Terminal" ]; then
+  eval "$(oh-my-posh init zsh --config $HOME/.config/oh-my-posh/themes/takuya-modified.json)"
+fi
+
+# Aliases
+alias ls='ls --color=auto'
+alias ll='ls -lhAF'
+alias vim='nvim'
+alias pn='pnpm'
