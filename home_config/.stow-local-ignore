@@ -1,0 +1,8 @@
+/.config/nvim/.git
+/.config/nvim/.github
+/.config/nvim/.gitignore
+/.config/nvim/doc
+/.config/nvim/README.*
+/.config/nvim/LICENSE.*
+/.config/nvim/.stylua.toml
+/.config/nvim/.*.sh
