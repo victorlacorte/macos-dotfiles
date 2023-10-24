@@ -1,0 +1,18 @@
+[gpg]
+	program = gpg
+[commit]
+	gpgsign = true
+[user]
+	signingkey = 3462DB3EC153D4AE
+	name = Victor Lacorte
+	email = victor@victorlacorte.com.br
+[core]
+	editor = nvim
+[fetch]
+	prune = true
+[rerere]
+	enabled = true
+[rebase]
+	autoSquash = true
+[push]
+	useForceIfIncludes = true
