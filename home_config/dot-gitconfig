@@ -16,3 +16,5 @@
 	autoSquash = true
 [push]
 	useForceIfIncludes = true
+[init]
+	defaultBranch = main
