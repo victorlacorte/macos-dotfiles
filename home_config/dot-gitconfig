@@ -16,5 +16,8 @@
 	autoSquash = true
 [push]
 	useForceIfIncludes = true
+	recurseSubmodules = on-demand
 [init]
 	defaultBranch = main
+[status]
+	submoduleSummary = 1
