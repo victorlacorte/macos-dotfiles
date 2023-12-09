@@ -21,3 +21,5 @@
 	defaultBranch = main
 [status]
 	submoduleSummary = 1
+[alias]
+	fixup = !git commit --fixup=$(git log --oneline -n 30 | fzf | cut -d\" \" -f1)
