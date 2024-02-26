@@ -1,4 +1,4 @@
 [submodule "home_config/.config/nvim"]
 	path = home_config/.config/nvim
-	url = ../dot-config-nvim
+	url = https://github.com/victorlacorte/dot-config-nvim
 	branch = main
