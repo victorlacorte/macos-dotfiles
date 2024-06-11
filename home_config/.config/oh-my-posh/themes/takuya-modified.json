@@ -14,7 +14,7 @@
           "properties": {
             "style": "letter"
           },
-          "template": "  {{ .Path }} "
+          "template": "{{ .Path }} "
         },
         {
           "type": "git",
