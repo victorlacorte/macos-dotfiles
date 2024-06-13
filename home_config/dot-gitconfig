@@ -5,7 +5,7 @@
 [user]
 	signingkey = 3462DB3EC153D4AE
 	name = Victor Lacorte
-	email = eu@victorlacorte.com.br
+	email = 1683634+victorlacorte@users.noreply.github.com
 [core]
 	editor = nvim
 [fetch]
