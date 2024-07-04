@@ -56,9 +56,31 @@ config.font_size = 16
 -- Disable ligatures: https://wezfurlong.org/wezterm/config/font-shaping.html#advanced-font-shaping-options
 config.harfbuzz_features = { 'calt=0', 'clig=0', 'liga=0' }
 
--- Tmux mappings
 config.leader = { key = 'a', mods = 'CTRL', timeout_milliseconds = 1000 }
+
+-- https://wezfurlong.org/wezterm/config/lua/wezterm.gui/default_key_tables.html
+-- Override certain key assignments without defining the entire copy_mode key table
+local copy_mode = wezterm.gui.default_key_tables().copy_mode
+
+table.insert(copy_mode, {
+  key = 'Enter',
+  mods = 'NONE',
+  action = wezterm.action.Multiple({
+    { CopyTo = 'ClipboardAndPrimarySelection' },
+    { CopyMode = 'Close' },
+  }),
+})
+
+config.key_tables = {
+  copy_mode = copy_mode,
+}
+
 config.keys = {
+  {
+    key = '[',
+    mods = 'LEADER',
+    action = wezterm.action.ActivateCopyMode,
+  },
   {
     key = '%',
     mods = 'LEADER|SHIFT',
