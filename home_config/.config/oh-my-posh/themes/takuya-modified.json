@@ -15,7 +15,6 @@
             "style": "letter"
           },
           "template": "  {{ .Path }} "
-
         },
         {
           "type": "git",
@@ -48,9 +47,7 @@
           "background": "#6CA35E",
           "foreground": "#ffffff",
           "properties": {
-            "fetch_package_manager": true,
-            "npm_icon": "<#cc3a3a></>",
-            "yarn_icon": "<#2188B6></>"
+            "fetch_package_manager": true
           },
           "template": "  {{ if .PackageManagerIcon }}{{ .PackageManagerIcon }} {{ end }}{{ .Full }} "
         },
@@ -76,9 +73,7 @@
           "type": "exit",
           "style": "plain",
           "foreground": "#5cb85c",
-          "foreground_templates": [
-            "{{ if gt .Code 0 }}#ef5350{{ end }}"
-          ],
+          "foreground_templates": ["{{ if gt .Code 0 }}#ef5350{{ end }}"],
           "properties": {
             "always_enabled": true
           },
