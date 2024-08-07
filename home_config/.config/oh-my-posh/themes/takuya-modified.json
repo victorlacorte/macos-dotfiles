@@ -9,8 +9,8 @@
           "style": "diamond",
           "leading_diamond": "",
           "trailing_diamond": "",
-          "background": "#1d3557",
-          "foreground": "#a8dadc",
+          "background": "#2f334d",
+          "foreground": "#82aaff",
           "properties": {
             "style": "letter"
           },
@@ -20,8 +20,8 @@
           "type": "git",
           "style": "powerline",
           "powerline_symbol": "",
-          "background": "#1d3557",
-          "foreground": "#a8dadc",
+          "background": "#2f334d",
+          "foreground": "#82aaff",
           "properties": {
             "branch_icon": " ",
             "fetch_status": true,
