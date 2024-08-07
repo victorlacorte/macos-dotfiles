@@ -50,6 +50,10 @@ local sessionizer = function(window, pane)
   )
 end
 
+-- Colorscheme
+-- https://wezfurlong.org/wezterm/colorschemes/t/index.html
+config.color_scheme = 'Tokyo Night Night'
+
 -- Font config
 config.font = wezterm.font('JetBrains Mono')
 config.font_size = 16
@@ -152,10 +156,13 @@ config.keys = {
 }
 
 -- The filled in variant of the "<" symbol
-local SOLID_LEFT_ARROW = utf8.char(0xe0b2)
+local SOLID_LEFT_ARROW = wezterm.nerdfonts.pl_right_hard_divider
 
+-- https://github.com/folke/tokyonight.nvim/blob/main/lua/tokyonight/colors/moon.lua
+-- blue
 local COLOR_BLUE = '#82aaff'
-local COLOR_BLACK = '#3b4261'
+-- bg_highlight
+local COLOR_BLACK = '#2f334d'
 
 local get_color = function(index)
   if index % 2 == 0 then
@@ -184,6 +191,7 @@ wezterm.on('update-status', function(window)
     local cell_index = num_fmt_cells + 1
 
     table.insert(elements, { Foreground = { Color = get_color(cell_index).bg } })
+    table.insert(elements, { Background = { Color = get_color(cell_index).fg } })
     table.insert(elements, { Text = SOLID_LEFT_ARROW })
     table.insert(elements, { Foreground = { Color = get_color(cell_index).fg } })
     table.insert(elements, { Background = { Color = get_color(cell_index).bg } })
