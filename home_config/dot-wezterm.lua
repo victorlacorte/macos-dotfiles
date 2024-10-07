@@ -16,7 +16,7 @@ local sessionizer = function(window, pane)
     '--max-depth=4',
     '--prune',
     '^.git$',
-    '/Users/victorlacorte/First vault',
+    '/Users/victorlacorte/notes',
     '/Users/victorlacorte/coding',
   })
 
