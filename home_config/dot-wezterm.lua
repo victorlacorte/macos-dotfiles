@@ -16,8 +16,8 @@ local sessionizer = function(window, pane)
     '--max-depth=4',
     '--prune',
     '^.git$',
-    '/Users/victorlacorte/notes',
-    '/Users/victorlacorte/coding',
+    '/Users/victor',
+    '/Users/victorlacorte',
   })
 
   if not success then
