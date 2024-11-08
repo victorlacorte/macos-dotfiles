@@ -3,7 +3,7 @@
 [commit]
 	gpgsign = true
 [user]
-	signingkey = 3462DB3EC153D4AE
+	signingkey = 69352D083685259C
 	name = Victor Lacorte
 	email = 1683634+victorlacorte@users.noreply.github.com
 [core]
