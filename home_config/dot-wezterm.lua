@@ -52,7 +52,7 @@ end
 
 -- Colorscheme
 -- https://wezfurlong.org/wezterm/colorschemes/t/index.html
-config.color_scheme = 'Tokyo Night Night'
+config.color_scheme = 'tokyonight_night'
 
 -- Font config
 config.font = wezterm.font('JetBrains Mono')
