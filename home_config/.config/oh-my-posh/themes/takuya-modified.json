@@ -1,103 +1,104 @@
 {
   "$schema": "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/schema.json",
+  "transient_prompt": {
+    "template": "{{ .Shell }}> ",
+    "foreground": "#ffffff",
+    "background": "transparent"
+  },
   "blocks": [
     {
+      "type": "prompt",
       "alignment": "left",
       "segments": [
         {
-          "type": "path",
-          "style": "diamond",
-          "leading_diamond": "",
-          "trailing_diamond": "",
-          "background": "#2f334d",
-          "foreground": "#82aaff",
           "properties": {
             "style": "letter"
           },
-          "template": "  {{ .Path }} "
+          "leading_diamond": "\ue0b6",
+          "trailing_diamond": "\ue0b0",
+          "template": "\ue5ff  {{ .Path }} ",
+          "foreground": "#82aaff",
+          "background": "#2f334d",
+          "type": "path",
+          "style": "diamond"
         },
         {
-          "type": "git",
-          "style": "powerline",
-          "powerline_symbol": "",
-          "background": "#2f334d",
-          "foreground": "#82aaff",
           "properties": {
-            "branch_icon": " ",
+            "branch_icon": "\ue725 ",
             "fetch_status": true,
             "fetch_upstream_icon": true
           },
-          "template": " {{ .HEAD }} {{ if .Working.Changed }}{{ .Working.String }}{{ end }}{{ if and (.Working.Changed) (.Staging.Changed) }} |{{ end }}{{ if .Staging.Changed }}<#ef5350>  {{ .Staging.String }}</>{{ end }} "
+          "template": " {{ .HEAD }} {{ if .Working.Changed }}{{ .Working.String }}{{ end }}{{ if and (.Working.Changed) (.Staging.Changed) }} |{{ end }}{{ if .Staging.Changed }}<#ef5350> \uf046 {{ .Staging.String }}</>{{ end }} ",
+          "foreground": "#82aaff",
+          "powerline_symbol": "\ue0b0",
+          "background": "#2f334d",
+          "type": "git",
+          "style": "powerline"
         },
         {
-          "type": "go",
-          "style": "powerline",
-          "powerline_symbol": "",
-          "background": "#8ED1F7",
-          "foreground": "#111111",
           "properties": {
             "fetch_version": true
           },
-          "template": "  {{ if .Error }}{{ .Error }}{{ else }}{{ .Full }}{{ end }} "
+          "template": " \ue626 {{ if .Error }}{{ .Error }}{{ else }}{{ .Full }}{{ end }} ",
+          "foreground": "#111111",
+          "powerline_symbol": "\ue0b0",
+          "background": "#8ED1F7",
+          "type": "go",
+          "style": "powerline"
         },
         {
-          "type": "node",
-          "style": "powerline",
-          "powerline_symbol": "",
-          "background": "#6CA35E",
-          "foreground": "#ffffff",
           "properties": {
             "fetch_package_manager": true
           },
-          "template": "  {{ if .PackageManagerIcon }}{{ .PackageManagerIcon }} {{ end }}{{ .Full }} "
+          "template": " \ue718 {{ if .PackageManagerIcon }}{{ .PackageManagerIcon }} {{ end }}{{ .Full }} ",
+          "foreground": "#ffffff",
+          "powerline_symbol": "\ue0b0",
+          "background": "#6CA35E",
+          "type": "node",
+          "style": "powerline"
         },
         {
-          "type": "python",
-          "style": "powerline",
-          "powerline_symbol": "",
-          "background": "#0087D8",
-          "foreground": "#003544",
           "properties": {
             "display_mode": "environment"
           },
-          "template": "  {{ if .Error }}{{ .Error }}{{ else }}{{.Venv }} {{ .Full }}{{ end }} "
+          "template": " \ue235 {{ if .Error }}{{ .Error }}{{ else }}{{.Venv }} {{ .Full }}{{ end }} ",
+          "foreground": "#003544",
+          "powerline_symbol": "\ue0b0",
+          "background": "#0087D8",
+          "type": "python",
+          "style": "powerline"
         }
-      ],
-      "type": "prompt"
+      ]
     },
     {
+      "type": "prompt",
       "alignment": "left",
-      "newline": true,
       "segments": [
         {
-          "type": "exit",
-          "style": "plain",
-          "foreground": "#5cb85c",
-          "foreground_templates": ["{{ if gt .Code 0 }}#ef5350{{ end }}"],
           "properties": {
             "always_enabled": true
           },
-          "template": "❯ "
+          "template": "❯ ",
+          "foreground": "#5cb85c",
+          "type": "exit",
+          "style": "plain",
+          "foreground_templates": [
+            "{{ if gt .Code 0 }}#ef5350{{ end }}"
+          ]
         },
         {
-          "type": "root",
-          "style": "diamond",
-          "background": "#ef5350",
-          "foreground": "#FFFB38",
           "properties": {
-            "root_icon": ""
+            "root_icon": "\uf292"
           },
-          "template": "<parentBackground></>  "
+          "template": "<parentBackground>\ue0b0</> \uf0e7 ",
+          "foreground": "#FFFB38",
+          "background": "#ef5350",
+          "type": "root",
+          "style": "diamond"
         }
       ],
-      "type": "prompt"
+      "newline": true
     }
   ],
-  "transient_prompt": {
-    "background": "transparent",
-    "foreground": "#ffffff",
-    "template": "{{ .Shell }}> "
-  },
-  "osc99": true,
-  "version": 2
+  "version": 3
 }
