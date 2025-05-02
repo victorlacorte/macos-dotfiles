@@ -13,3 +13,5 @@ end, { desc = '[F]ormat' })
 -- Split window
 vim.keymap.set('n', '<leader>ss', ':split<CR><C-w>w', { desc = '[S]plit horizontally' })
 vim.keymap.set('n', '<leader>sv', ':vsplit<CR><C-w>w', { desc = '[S]plit [v]ertically' })
+
+vim.keymap.set('n', '<leader>vd', vim.diagnostic.open_float, { desc = '[V]iew [d]iagnostic' })
