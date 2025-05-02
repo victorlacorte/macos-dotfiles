@@ -53,23 +53,35 @@ vim.o.confirm = true
 
 vim.g.netrw_banner = 0
 
------------------------------------------------------------------------------
--- Experimental stuff
-vim.lsp.enable('lua-language-server')
-
-vim.api.nvim_create_autocmd('LspAttach', {
-  callback = function(ev)
-    local client = vim.lsp.get_client_by_id(ev.data.client_id)
-    if client and client:supports_method('textDocument/completion') then
-      vim.lsp.completion.enable(true, client.id, ev.buf, { autotrigger = true })
-    end
+vim.api.nvim_create_autocmd('TextYankPost', {
+  desc = 'Highlight when yanking (copying) text',
+  group = vim.api.nvim_create_augroup('kickstart-highlight-yank', { clear = true }),
+  callback = function()
+    vim.hl.on_yank()
   end,
 })
 
-vim.cmd('set completeopt+=noselect')
-vim.o.winborder = 'rounded'
+-- Experimental stuff
+-- vim.lsp.enable('lua-language-server')
+--
+-- vim.api.nvim_create_autocmd('LspAttach', {
+--   callback = function(ev)
+--     local client = vim.lsp.get_client_by_id(ev.data.client_id)
+--     if client and client:supports_method('textDocument/completion') then
+--       vim.lsp.completion.enable(true, client.id, ev.buf, { autotrigger = true })
+--     end
+--   end,
+-- })
 
-vim.diagnostic.config({
-  virtual_text = { current_line = true },
-  -- virtual_lines = true
-})
+vim.cmd('set completeopt+=noselect')
+-- vim.o.winborder = 'rounded'
+
+-- vim.diagnostic.config({
+--   -- virtual_text = { current_line = true },
+--   -- virtual_text = true,
+--   -- virtual_lines = true,
+--   -- virtual_lines = {
+--   --   -- Only show virtual line diagnostics for the current cursor line
+--   --   current_line = true,
+--   -- },
+-- })
