@@ -1,14 +1,10 @@
+-- Allow moving highlighted content up or down
+vim.keymap.set('v', 'J', ":m '>+1<CR>gv=gv")
+vim.keymap.set('v', 'K', ":m '<-2<CR>gv=gv")
+
 vim.keymap.set('n', '<leader>pv', function()
   vim.cmd('Explore')
 end, { desc = 'Toggle Netrw' })
-
-vim.keymap.set({ 'n', 'v' }, '<leader>f', function()
-  vim.lsp.buf.format({
-    filter = function(client)
-      return client.name ~= 'ts_ls'
-    end,
-  })
-end, { desc = '[F]ormat' })
 
 -- Split window
 vim.keymap.set('n', '<leader>ss', ':split<CR><C-w>w', { desc = '[S]plit horizontally' })
