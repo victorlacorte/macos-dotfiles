@@ -5,6 +5,7 @@ return {
   init = function()
     local servers = {
       'lua-language-server',
+      'prettierd',
       'typescript-language-server',
       'stylua',
     }
