@@ -13,8 +13,11 @@ return {
     return {
       root_dir = require('null-ls.utils').root_pattern('.null-ls-root', '.neoconf.json', 'Makefile', '.git'),
       sources = {
+        nls.builtins.formatting.prettierd.with({
+          disabled_filetypes = { 'yaml' },
+          prefer_local = 'node_modules/.bin',
+        }),
         nls.builtins.formatting.stylua,
-        --nls.builtins.formatting.shfmt,
       },
     }
   end,
