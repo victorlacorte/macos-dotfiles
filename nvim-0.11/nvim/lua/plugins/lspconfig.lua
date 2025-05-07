@@ -1,35 +1,87 @@
 return {
   'neovim/nvim-lspconfig',
   dependencies = {
-    'williamboman/mason.nvim',
-    'williamboman/mason-lspconfig.nvim',
+    { 'mason-org/mason.nvim', version = '1.11.0', opts = {} },
+    { 'mason-org/mason-lspconfig.nvim', version = '1.32.0' },
+    'WhoIsSethDaniel/mason-tool-installer.nvim',
+
+    { 'j-hui/fidget.nvim', opts = {} },
+
     'saghen/blink.cmp',
   },
   config = function()
-    local capabilities = require('blink.cmp').get_lsp_capabilities()
-
     local servers = {
-      'lua_ls',
-      'ts_ls',
+      eslint_d = {},
+      prettierd = {},
+      stylua = {},
+      lua_ls = {
+        -- Even though there are defined settings below, lazydev is effectively
+        -- patching lua-language-server so I'm not sure these are even required.
+        settings = {
+          Lua = {
+            completion = {
+              callSnippet = 'Replace',
+            },
+            diagnostics = {
+              globals = {
+                'vim',
+              },
+            },
+            format = {
+              -- enabled via none-ls with stylua
+              enable = false,
+            },
+            runtime = {
+              version = 'LuaJIT',
+            },
+            telemetry = {
+              enable = false,
+            },
+            workspace = {
+              library = {
+                vim.env.VIMRUNTIME,
+                '${3rd}/luv/library',
+              },
+            },
+          },
+        },
+      },
+      -- https://github.com/neovim/nvim-lspconfig/blob/master/doc/configs.md#ts_ls
+      ts_ls = {
+        init_options = {
+          maxTsServerMemory = 4096,
+          plugins = {
+            -- https://github.com/styled-components/typescript-styled-plugin
+            {
+              name = '@styled/typescript-styled-plugin',
+              location = vim.fn.expand(
+                '$HOME/.volta/tools/image/packages/@styled/typescript-styled-plugin/lib/node_modules/@styled/typescript-styled-plugin/lib/index.js'
+              ),
+            },
+          },
+        },
+        root_markers = { 'tsconfig.base.json', 'tsconfig.json', 'package.json', '.git' },
+      },
     }
 
+    local ensure_installed = vim.tbl_keys(servers or {})
+    require('mason-tool-installer').setup({ ensure_installed = ensure_installed })
+
+    local function setup(server_name)
+      local capabilities = vim.tbl_deep_extend('force', {}, vim.lsp.protocol.make_client_capabilities(), require('blink.cmp').get_lsp_capabilities())
+
+      local server_opts = vim.tbl_deep_extend('force', {
+        capabilities = vim.deepcopy(capabilities),
+      }, servers[server_name] or {})
+
+      require('lspconfig')[server_name].setup(server_opts)
+    end
+
     require('mason-lspconfig').setup({
-      -- ensure_installed = {},
-      -- automatic_installation = false,
-      handlers = {
-        function(server_name)
-          local server = servers[server_name] or {}
-          -- This handles overriding only values explicitly passed
-          -- by the server configuration above. Useful when disabling
-          -- certain features of an LSP (for example, turning off formatting for ts_ls)
-          server.capabilities = vim.tbl_deep_extend('force', {}, capabilities, server.capabilities or {})
-
-          require('lspconfig')[server_name].setup(server)
-        end,
-      },
+      automatic_installation = true,
+      ensure_installed = {},
+      handlers = { setup },
     })
-
-    vim.lsp.enable(servers)
   end,
   init = function()
     vim.api.nvim_create_autocmd('LspAttach', {
@@ -45,6 +97,8 @@ return {
           vim.keymap.set(mode, keys, func, { buffer = event.buf, desc = 'LSP: ' .. desc })
         end
 
+        local client = vim.lsp.get_client_by_id(event.data.client_id)
+
         -- Rename the variable under your cursor.
         --  Most Language Servers support renaming across files, etc.
         map('<leader>rn', vim.lsp.buf.rename, '[R]e[n]ame')
@@ -59,6 +113,16 @@ return {
         -- Jump to the definition of the word under your cursor.
         --  This is where a variable was first declared, or where a function is defined, etc.
         --  To jump back, press <C-t>.
+
+        -- map('<leader>gd', client.name ~= 'ts_ls' and require('fzf-lua').lsp_definitions or function()
+        --   local position_params = vim.lsp.util.make_position_params(0, 'utf-8')
+        --
+        --   client:exec_cmd({
+        --     command = '_typescript.goToSourceDefinition',
+        --     arguments = { vim.api.nvim_buf_get_name(0), position_params.position },
+        --   })
+        -- end, '[G]oto [D]efinition')
+
         map('<leader>gd', require('fzf-lua').lsp_definitions, '[G]oto [D]efinition')
 
         -- The following two autocommands are used to highlight references of the
@@ -66,7 +130,6 @@ return {
         --    See `:help CursorHold` for information about when this is executed
         --
         -- When you move your cursor, the highlights will be cleared (the second autocommand).
-        local client = vim.lsp.get_client_by_id(event.data.client_id)
         if client and client:supports_method(vim.lsp.protocol.Methods.textDocument_documentHighlight, event.buf) then
           local highlight_augroup = vim.api.nvim_create_augroup('kickstart-lsp-highlight', { clear = false })
           vim.api.nvim_create_autocmd({ 'CursorHold', 'CursorHoldI' }, {
