@@ -66,8 +66,9 @@ return {
     sources = {
       default = {
         'lsp',
-        'path',
+        'buffer',
         'snippets',
+        'path',
         'lazydev',
       },
       providers = {
