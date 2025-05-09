@@ -15,16 +15,3 @@ vim.keymap.set('n', '<C-k>', '<cmd>cprev<CR>zz')
 -- Remap for dealing with word wrap
 vim.keymap.set('n', 'k', "v:count == 0 ? 'gk' : 'k'", { expr = true, silent = true })
 vim.keymap.set('n', 'j', "v:count == 0 ? 'gj' : 'j'", { expr = true, silent = true })
-
-local is_netrw_open = false
-
-vim.keymap.set('n', '<leader>pv', function()
-  if is_netrw_open then
-    is_netrw_open = false
-    vim.cmd('Lex')
-  else
-    is_netrw_open = true
-    -- Open Netrw in the directory of the current file
-    vim.cmd('Lex %:p:h')
-  end
-end, { desc = 'Toggle Netrw' })
