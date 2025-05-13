@@ -1,97 +1,23 @@
 return {
-  'neovim/nvim-lspconfig',
+  'mason-org/mason-lspconfig.nvim',
+  event = 'BufReadPost',
   dependencies = {
-    { 'mason-org/mason.nvim', version = '1.11.0', opts = {} },
-    { 'mason-org/mason-lspconfig.nvim', version = '1.32.0' },
-    'WhoIsSethDaniel/mason-tool-installer.nvim',
-
+    'mason-org/mason.nvim',
+    'neovim/nvim-lspconfig',
     { 'j-hui/fidget.nvim', opts = {} },
-
     'saghen/blink.cmp',
   },
-  config = function()
-    local servers = {
-      eslint_d = {},
-      prettierd = {},
-      stylua = {},
-      lua_ls = {
-        -- Even though there are defined settings below, lazydev is effectively
-        -- patching lua-language-server so I'm not sure these are even required.
-        settings = {
-          Lua = {
-            completion = {
-              callSnippet = 'Replace',
-            },
-            diagnostics = {
-              globals = {
-                'vim',
-              },
-            },
-            format = {
-              -- enabled via none-ls with stylua
-              enable = false,
-            },
-            runtime = {
-              version = 'LuaJIT',
-            },
-            telemetry = {
-              enable = false,
-            },
-            workspace = {
-              library = {
-                vim.env.VIMRUNTIME,
-                '${3rd}/luv/library',
-              },
-            },
-          },
-        },
-      },
-      -- https://github.com/neovim/nvim-lspconfig/blob/master/doc/configs.md#ts_ls
-      ts_ls = {
-        init_options = {
-          maxTsServerMemory = 4096,
-          plugins = {
-            -- https://github.com/styled-components/typescript-styled-plugin
-            {
-              name = '@styled/typescript-styled-plugin',
-              location = vim.fn.expand(
-                '$HOME/.volta/tools/image/packages/@styled/typescript-styled-plugin/lib/node_modules/@styled/typescript-styled-plugin/lib/index.js'
-              ),
-            },
-          },
-        },
-        root_markers = { 'tsconfig.base.json', 'tsconfig.json', 'package.json', '.git' },
-      },
-    }
-
-    local ensure_installed = vim.tbl_keys(servers or {})
-    require('mason-tool-installer').setup({ ensure_installed = ensure_installed })
-
-    local function setup(server_name)
-      local capabilities = vim.tbl_deep_extend('force', {}, vim.lsp.protocol.make_client_capabilities(), require('blink.cmp').get_lsp_capabilities())
-
-      local server_opts = vim.tbl_deep_extend('force', {
-        capabilities = vim.deepcopy(capabilities),
-      }, servers[server_name] or {})
-
-      require('lspconfig')[server_name].setup(server_opts)
-    end
-
-    require('mason-lspconfig').setup({
-      automatic_installation = true,
-      ensure_installed = {},
-      handlers = { setup },
-    })
-  end,
+  opts = {
+    ensure_installed = {
+      'lua_ls',
+      'ts_ls',
+      'jsonls',
+    },
+  },
   init = function()
     vim.api.nvim_create_autocmd('LspAttach', {
       group = vim.api.nvim_create_augroup('kickstart-lsp-attach', { clear = true }),
       callback = function(event)
-        -- NOTE: Remember that Lua is a real programming language, and as such it is possible
-        -- to define small helper and utility functions so you don't have to repeat yourself.
-        --
-        -- In this case, we create a function that lets us more easily define mappings specific
-        -- for LSP related items. It sets the mode, buffer and description for us each time.
         local map = function(keys, func, desc, mode)
           mode = mode or 'n'
           vim.keymap.set(mode, keys, func, { buffer = event.buf, desc = 'LSP: ' .. desc })

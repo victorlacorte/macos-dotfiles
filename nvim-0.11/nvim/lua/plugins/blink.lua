@@ -1,6 +1,5 @@
 return {
   'saghen/blink.cmp',
-  event = 'VimEnter',
   version = '1.*',
   dependencies = {
     -- Snippet Engine
@@ -90,4 +89,5 @@ return {
     -- Shows a signature help window while you type arguments for a function
     signature = { enabled = true },
   },
+  opts_extend = { 'sources.default' },
 }
