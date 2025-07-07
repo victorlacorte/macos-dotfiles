@@ -1,6 +1,6 @@
 return {
   init_options = {
-    maxTsServerMemory = 4096,
+    maxTsServerMemory = 8192,
     plugins = {
       -- https://github.com/styled-components/typescript-styled-plugin
       {
