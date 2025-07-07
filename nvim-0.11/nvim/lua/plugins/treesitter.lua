@@ -21,10 +21,15 @@ return {
       'vim',
       'vimdoc',
       'yaml',
+
       'javascript',
       'jsdoc',
       'typescript',
       'tsx',
+
+      'elixir',
+      'heex',
+      'eex',
     },
     auto_install = true,
     highlight = {

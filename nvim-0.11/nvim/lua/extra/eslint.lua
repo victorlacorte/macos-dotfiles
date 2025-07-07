@@ -9,15 +9,15 @@ return {
   --     end
   --   end,
   -- },
-  {
-    'nvimtools/none-ls.nvim',
-    opts = function(_, opts)
-      -- if type(opts.sources) == 'table' then
-      --   vim.env.ESLINT_D_PPID = vim.fn.getpid()
-      --
-      --   table.insert(opts.sources, require('none-ls.code_actions.eslint_d'))
-      --   table.insert(opts.sources, require('none-ls.diagnostics.eslint_d'))
-      -- end
-    end,
-  },
+  -- {
+  --   'nvimtools/none-ls.nvim',
+  --   opts = function(_, opts)
+  --     if type(opts.sources) == 'table' then
+  --       vim.env.ESLINT_D_PPID = vim.fn.getpid()
+  --
+  --       table.insert(opts.sources, require('none-ls.code_actions.eslint_d'))
+  --       table.insert(opts.sources, require('none-ls.diagnostics.eslint_d'))
+  --     end
+  --   end,
+  -- },
 }

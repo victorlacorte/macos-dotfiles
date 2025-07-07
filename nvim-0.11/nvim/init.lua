@@ -1,4 +1,4 @@
-vim.loader.enable(true)
+-- vim.loader.enable(true)
 
 require('config.options')
 require('config.keymaps')

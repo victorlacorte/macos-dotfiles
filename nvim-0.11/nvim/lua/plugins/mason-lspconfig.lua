@@ -1,6 +1,6 @@
 return {
   'mason-org/mason-lspconfig.nvim',
-  event = 'BufReadPost',
+  -- event = 'BufReadPost',
   dependencies = {
     'mason-org/mason.nvim',
     'neovim/nvim-lspconfig',
@@ -9,9 +9,10 @@ return {
   },
   opts = {
     ensure_installed = {
+      'elixirls',
+      'jsonls',
       'lua_ls',
       'ts_ls',
-      'jsonls',
     },
   },
   init = function()
