@@ -16,6 +16,31 @@ return {
         return 'make install_jsregexp'
       end)(),
       opts = {},
+      dependencies = {
+        'rafamadriz/friendly-snippets',
+        -- 'MeanderingProgrammer/render-markdown.nvim',
+      },
+      config = function(_, opts)
+        if opts then
+          require('luasnip').config.setup(opts)
+        end
+
+        require('luasnip.loaders.from_vscode').lazy_load({
+          -- This is better than `exclude` as JS-related snippets add too many suggestions
+          include = {
+            'lua',
+            'markdown',
+          },
+        })
+
+        -- require('render-markdown').setup({
+        --   completions = { blink = { enabled = true } },
+        -- })
+
+        -- https://github.com/rafamadriz/friendly-snippets/wiki#extending-via-lazynvim
+        -- require('luasnip').filetype_extend('typescript', { 'tsdoc' })
+        -- require('luasnip').filetype_extend('javascript', { 'jsdoc' })
+      end,
     },
     'folke/lazydev.nvim',
     'moyiz/blink-emoji.nvim',
@@ -71,6 +96,7 @@ return {
         'path',
         'lazydev',
         'emoji',
+        -- 'markdown',
       },
       providers = {
         lazydev = { module = 'lazydev.integrations.blink', score_offset = 100 },
@@ -88,6 +114,10 @@ return {
             )
           end,
         },
+        -- markdown = {
+        --   name = 'RenderMarkdown',
+        --   module = 'render-markdown.integ.blink',
+        -- },
       },
     },
 

@@ -1,7 +1,7 @@
 return {
   'nvimtools/none-ls.nvim',
   -- Copied from LazyVim/lua/lazyvim/util/plugin.lua
-  event = { 'BufReadPost', 'BufNewFile', 'BufWritePre' },
+  -- event = { 'BufReadPost', 'BufNewFile', 'BufWritePre' },
   dependencies = {
     'mason-org/mason.nvim',
     'nvimtools/none-ls-extras.nvim',
@@ -19,6 +19,7 @@ return {
         }),
         nls.builtins.formatting.stylua,
       },
+      -- debug = true,
     }
   end,
 }

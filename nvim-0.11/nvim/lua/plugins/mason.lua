@@ -9,7 +9,7 @@ return {
     'MasonLog',
   },
   opts = {
-    -- Non-lsps are listed here
+    -- Non-lsps i.e. tools are listed here
     ensure_installed = {
       'eslint_d',
       'prettierd',
