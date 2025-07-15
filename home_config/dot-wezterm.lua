@@ -175,7 +175,10 @@ end
 wezterm.on('update-status', function(window)
   local cells = {
     window:active_workspace(),
-    wezterm.strftime('%Y-%m-%d %H:%M'),
+
+    -- https://wezterm.org/config/lua/wezterm/strftime.html
+    -- https://docs.rs/chrono/0.4.19/chrono/format/strftime/index.html
+    wezterm.strftime('%d %b %H:%M'),
   }
 
   -- An entry for each battery (typically 0 or 1)
