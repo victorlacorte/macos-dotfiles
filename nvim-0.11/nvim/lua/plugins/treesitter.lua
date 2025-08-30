@@ -22,6 +22,7 @@ return {
       'vimdoc',
       'yaml',
 
+      'css',
       'javascript',
       'jsdoc',
       'typescript',
