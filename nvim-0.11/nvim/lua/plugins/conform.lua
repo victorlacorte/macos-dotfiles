@@ -23,6 +23,7 @@ return {
       javascriptreact = { 'prettierd' },
       typescript = { 'prettierd' },
       typescriptreact = { 'prettierd' },
+      markdown = { 'prettierd' },
     },
     default_format_opts = {
       lsp_format = 'fallback',

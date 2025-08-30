@@ -9,10 +9,11 @@ return {
   },
   opts = {
     ensure_installed = {
+      'cssls',
       'elixirls',
       'jsonls',
       'lua_ls',
-      'tailwindcss',
+      -- 'tailwindcss',
       'ts_ls',
     },
   },
