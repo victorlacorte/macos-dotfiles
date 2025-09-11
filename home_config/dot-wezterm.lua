@@ -56,7 +56,7 @@ config.color_scheme = 'tokyonight_night'
 
 -- Font config
 config.font = wezterm.font('JetBrains Mono')
-config.font_size = 16
+config.font_size = 20
 -- Disable ligatures: https://wezfurlong.org/wezterm/config/font-shaping.html#advanced-font-shaping-options
 config.harfbuzz_features = { 'calt=0', 'clig=0', 'liga=0' }
 
