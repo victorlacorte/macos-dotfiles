@@ -80,7 +80,7 @@
           },
           "template": "❯ ",
           "foreground": "#5cb85c",
-          "type": "exit",
+          "type": "status",
           "style": "plain",
           "foreground_templates": [
             "{{ if gt .Code 0 }}#ef5350{{ end }}"

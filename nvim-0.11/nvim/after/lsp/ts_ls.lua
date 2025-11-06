@@ -10,6 +10,18 @@ return {
         ),
       },
     },
+    preferences = {
+      autoImportFileExcludePatterns = {
+        'node_modules/**/internals',
+        'node_modules/@mui/icons-material',
+        'node_modules/@mui/lab',
+        'node_modules/@mui/system',
+        'node_modules/@mui/x-*/**',
+        'node_modules/aws-sdk',
+        'node_modules/framer-motion',
+        'node_modules/typescript',
+      },
+    },
   },
   root_markers = { 'tsconfig.base.json', 'tsconfig.json', 'package.json', '.git' },
 }
