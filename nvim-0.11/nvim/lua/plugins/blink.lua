@@ -5,7 +5,7 @@ return {
     -- Snippet Engine
     {
       'L3MON4D3/LuaSnip',
-      version = '2.*',
+      version = 'v2.*',
       build = (function()
         -- Build Step is needed for regex support in snippets.
         -- This step is not supported in many windows environments.

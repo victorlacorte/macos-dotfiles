@@ -23,4 +23,5 @@
 [status]
 	submoduleSummary = 1
 [alias]
+	branchsort = !git branch --sort=-committerdate --format='%(refname:short) %(committerdate:relative)'
 	fixup = !git commit --fixup=$(git log --oneline -n 30 | fzf | cut -d\" \" -f1)

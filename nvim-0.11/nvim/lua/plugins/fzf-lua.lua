@@ -11,7 +11,7 @@ return {
     grep = {
       hidden = true,
       -- This is the default value concatenated with the git glob due to `hidden = true` above
-      rg_opts = "--column --line-number --no-heading --color=always --smart-case --max-columns=4096 -g '!.git/' -e",
+      rg_opts = "--column --line-number --no-heading --color=always --smart-case --max-columns=4096 -g '!.git/' -g '!package-lock.json' -g '!pnpm-lock.yaml' -g '!yarn.lock' -e",
     },
     keymap = {
       fzf = {

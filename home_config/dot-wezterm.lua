@@ -50,6 +50,12 @@ local sessionizer = function(window, pane)
   )
 end
 
+-- https://wezterm.org/config/lua/config/front_end.html
+-- NOTE: probably not necessary but I'm attempting to solve an issue with the
+-- terminal in which all of a sudden it becomes sluggish and needs to be
+-- restarted
+config.front_end = 'OpenGL'
+
 -- Colorscheme
 -- https://wezfurlong.org/wezterm/colorschemes/t/index.html
 config.color_scheme = 'tokyonight_night'
