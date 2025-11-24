@@ -165,17 +165,15 @@ config.keys = {
 local SOLID_LEFT_ARROW = wezterm.nerdfonts.pl_right_hard_divider
 
 -- https://github.com/folke/tokyonight.nvim/blob/main/lua/tokyonight/colors/moon.lua
--- blue
-local COLOR_BLUE = '#82aaff'
--- bg_highlight
-local COLOR_BLACK = '#2f334d'
+local COLOR_ACCENT = '#c8d3f5'
+local COLOR_DEFAULT_BG = '#2f334d'
 
 local get_color = function(index)
   if index % 2 == 0 then
-    return { fg = COLOR_BLUE, bg = COLOR_BLACK }
+    return { fg = COLOR_ACCENT, bg = COLOR_DEFAULT_BG }
   end
 
-  return { fg = COLOR_BLACK, bg = COLOR_BLUE }
+  return { fg = COLOR_DEFAULT_BG, bg = COLOR_ACCENT }
 end
 
 wezterm.on('update-status', function(window)

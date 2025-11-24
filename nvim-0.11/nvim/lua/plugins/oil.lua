@@ -1,3 +1,5 @@
+local detail = false
+
 return {
   'stevearc/oil.nvim',
   ---@module 'oil'
@@ -12,5 +14,17 @@ return {
   lazy = false,
   keys = {
     { '<leader>pv', '<cmd>Oil<CR>', desc = 'Open file view' },
+    {
+      'gd',
+      function()
+        detail = not detail
+        if detail then
+          require('oil').set_columns({ 'icon', 'permissions', 'size', 'mtime' })
+        else
+          require('oil').set_columns({ 'icon' })
+        end
+      end,
+      desc = 'Toggle file detail view',
+    },
   },
 }
