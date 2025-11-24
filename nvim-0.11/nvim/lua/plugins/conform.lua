@@ -18,9 +18,10 @@ return {
   ---@type conform.setupOpts
   opts = {
     formatters_by_ft = {
-      lua = { 'stylua' },
       javascript = { 'prettierd' },
       javascriptreact = { 'prettierd' },
+      lua = { 'stylua' },
+      markdown = { 'prettierd' },
       typescript = { 'prettierd' },
       typescriptreact = { 'prettierd' },
       markdown = { 'prettierd' },

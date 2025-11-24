@@ -6,3 +6,4 @@
 /.config/nvim/LICENSE.*
 /.config/nvim/.stylua.toml
 /.config/nvim/.*.sh
+/.gitconfig.local

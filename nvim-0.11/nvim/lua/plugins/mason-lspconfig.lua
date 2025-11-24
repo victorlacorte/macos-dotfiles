@@ -13,7 +13,7 @@ return {
       'elixirls',
       'jsonls',
       'lua_ls',
-      -- 'tailwindcss',
+      'tailwindcss',
       'ts_ls',
     },
   },
