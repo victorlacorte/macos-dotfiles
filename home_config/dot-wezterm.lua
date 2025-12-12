@@ -2,7 +2,26 @@ local wezterm = require('wezterm')
 
 local config = wezterm.config_builder()
 
-local prev_workspace_name = nil
+-- Variables to allow toggling between workspaces
+-- `active_workspace` represents the workspace that was active the last time "update-status" ran
+local active_workspace = {
+  get = function()
+    return wezterm.GLOBAL.active_workspace
+  end,
+  set = function(v)
+    wezterm.GLOBAL.active_workspace = v
+  end,
+}
+
+-- The workspace to return to
+local prev_workspace = {
+  get = function()
+    return wezterm.GLOBAL.prev_workspace
+  end,
+  set = function(v)
+    wezterm.GLOBAL.prev_workspace = v
+  end,
+}
 
 -- Solution adapted from https://github.com/wez/wezterm/discussions/4796
 local sessionizer = function(window, pane)
@@ -48,6 +67,17 @@ local sessionizer = function(window, pane)
     }),
     pane
   )
+end
+
+local switch_to_prev_workspace = function(window, pane)
+  local curr = window:active_workspace()
+  local prev = prev_workspace.get()
+
+  if prev == curr or prev == nil then
+    return
+  end
+
+  window:perform_action(wezterm.action.SwitchToWorkspace({ name = prev }), pane)
 end
 
 -- https://wezterm.org/config/lua/config/front_end.html
@@ -118,8 +148,6 @@ config.keys = {
     key = 's',
     mods = 'LEADER',
     action = wezterm.action_callback(function(window, pane)
-      prev_workspace_name = window:active_workspace()
-
       window:perform_action(wezterm.action.ShowLauncherArgs({ flags = 'FUZZY|WORKSPACES' }), pane)
     end),
   },
@@ -132,15 +160,7 @@ config.keys = {
     key = 'L',
     mods = 'LEADER|SHIFT',
     action = wezterm.action_callback(function(window, pane)
-      local curr_workspace_name = window:active_workspace()
-
-      if prev_workspace_name == nil or curr_workspace_name == prev_workspace_name then
-        return
-      end
-
-      window:perform_action(wezterm.action.SwitchToWorkspace({ name = prev_workspace_name }), pane)
-
-      prev_workspace_name = curr_workspace_name
+      switch_to_prev_workspace(window, pane)
     end),
   },
 
@@ -177,8 +197,15 @@ local get_color = function(index)
 end
 
 wezterm.on('update-status', function(window)
+  local curr_workspace = window:active_workspace()
+
+  if active_workspace.get() ~= curr_workspace then
+    prev_workspace.set(active_workspace.get())
+    active_workspace.set(curr_workspace)
+  end
+
   local cells = {
-    window:active_workspace(),
+    curr_workspace,
 
     -- https://wezterm.org/config/lua/wezterm/strftime.html
     -- https://docs.rs/chrono/0.4.19/chrono/format/strftime/index.html

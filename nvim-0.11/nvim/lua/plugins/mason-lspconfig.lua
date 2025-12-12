@@ -9,8 +9,10 @@ return {
   },
   opts = {
     ensure_installed = {
+      'astro',
       'cssls',
       'elixirls',
+      'html',
       'jsonls',
       'lua_ls',
       'tailwindcss',

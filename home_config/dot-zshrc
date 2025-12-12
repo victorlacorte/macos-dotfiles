@@ -1,7 +1,10 @@
 unsetopt BEEP
 
-# Enable Git autocompletion
+# Enable autocompletions
+# Git
 autoload -Uz compinit && compinit
+# Pnpm
+source "$HOME/completion-for-pnpm.zsh"
 
 # Oh My Posh
 if [ "$TERM_PROGRAM" != "Apple_Terminal" ]; then
@@ -14,3 +17,4 @@ alias ll='ls -lhAF'
 alias vim='nvim'
 alias pn='pnpm'
 alias grep='grep --color=always'
+

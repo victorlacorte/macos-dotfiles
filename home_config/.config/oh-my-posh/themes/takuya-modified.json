@@ -11,7 +11,7 @@
       "alignment": "left",
       "segments": [
         {
-          "properties": {
+          "options": {
             "style": "letter"
           },
           "leading_diamond": "\ue0b6",
@@ -23,7 +23,7 @@
           "style": "diamond"
         },
         {
-          "properties": {
+          "options": {
             "branch_icon": "\ue725 ",
             "fetch_status": true,
             "fetch_upstream_icon": true
@@ -36,7 +36,7 @@
           "style": "powerline"
         },
         {
-          "properties": {
+          "options": {
             "fetch_version": true
           },
           "template": " \ue626 {{ if .Error }}{{ .Error }}{{ else }}{{ .Full }}{{ end }} ",
@@ -47,7 +47,7 @@
           "style": "powerline"
         },
         {
-          "properties": {
+          "options": {
             "fetch_package_manager": true
           },
           "template": " \ue718 {{ if .PackageManagerIcon }}{{ .PackageManagerIcon }} {{ end }}{{ .Full }} ",
@@ -58,7 +58,7 @@
           "style": "powerline"
         },
         {
-          "properties": {
+          "options": {
             "display_mode": "environment"
           },
           "template": " \ue235 {{ if .Error }}{{ .Error }}{{ else }}{{.Venv }} {{ .Full }}{{ end }} ",
@@ -75,7 +75,7 @@
       "alignment": "left",
       "segments": [
         {
-          "properties": {
+          "options": {
             "always_enabled": true
           },
           "template": "❯ ",
@@ -87,7 +87,7 @@
           ]
         },
         {
-          "properties": {
+          "options": {
             "root_icon": "\uf292"
           },
           "template": "<parentBackground>\ue0b0</> \uf0e7 ",
@@ -100,5 +100,5 @@
       "newline": true
     }
   ],
-  "version": 3
+  "version": 4
 }
