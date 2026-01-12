@@ -32,11 +32,12 @@ local sessionizer = function(window, pane)
     '--hidden',
     '--no-ignore',
     '--type=directory',
-    '--max-depth=4',
+    '--max-depth=3',
     '--prune',
     '^.git$',
     '/Users/victor',
-    '/Users/victorlacorte',
+    '/Users/victorlacorte/coding',
+    '/Users/victorlacorte/notes',
   })
 
   if not success then

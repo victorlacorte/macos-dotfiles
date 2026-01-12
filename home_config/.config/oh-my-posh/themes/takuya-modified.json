@@ -16,7 +16,7 @@
           },
           "leading_diamond": "\ue0b6",
           "trailing_diamond": "\ue0b0",
-          "template": "\ue5ff  {{ .Path }} ",
+          "template": "\ueaf7  {{ .Path }} ",
           "foreground": "#82aaff",
           "background": "#2f334d",
           "type": "path",
@@ -78,7 +78,7 @@
           "options": {
             "always_enabled": true
           },
-          "template": "❯ ",
+          "template": "\u276f ",
           "foreground": "#5cb85c",
           "type": "status",
           "style": "plain",
