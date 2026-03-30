@@ -12,7 +12,7 @@ return {
     -- Non-lsps i.e. tools are listed here
     ensure_installed = {
       'eslint_d',
-      'prettierd',
+      'oxfmt',
       'stylua',
     },
   },

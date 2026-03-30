@@ -1,18 +1,19 @@
 return {
   'nvim-treesitter/nvim-treesitter',
+  branch = 'main',
+  lazy = false,
   build = ':TSUpdate',
-  main = 'nvim-treesitter.configs', -- Sets main module to use for opts
-  init = function()
-    -- Folding: https://github.com/nvim-treesitter/nvim-treesitter#folding
-    vim.wo.foldmethod = 'expr'
-    vim.wo.foldexpr = 'v:lua.vim.treesitter.foldexpr()'
-    vim.wo.foldenable = false
-  end,
-  opts = {
-    ensure_installed = {
+  config = function()
+    local install_dir = vim.fn.stdpath('data') .. '/site'
+    vim.opt.runtimepath:append(install_dir)
+
+    local ts = require('nvim-treesitter')
+    ts.setup({ install_dir = install_dir })
+
+    -- Parsers to install at startup (no-op if already present)
+    local ensure_installed = {
       'bash',
       'json',
-      'jsonc',
       'lua',
       'luadoc',
       'luap',
@@ -31,33 +32,37 @@ return {
       'elixir',
       'heex',
       'eex',
-    },
-    auto_install = true,
-    highlight = {
-      enable = true,
-      -- Some languages depend on vim's regex highlighting system (such as Ruby) for indent rules.
-      --  If you are experiencing weird indenting issues, add the language to
-      --  the list of additional_vim_regex_highlighting and disabled languages for indent.
-      additional_vim_regex_highlighting = { 'ruby' },
-    },
-    indent = { enable = true, disable = { 'ruby' } },
-  },
-  config = function(_, opts)
-    if type(opts.ensure_installed) == 'table' then
-      local added = {}
+    }
 
-      -- deduplicate entries
-      opts.ensure_installed = vim.tbl_filter(function(lang)
-        if added[lang] then
-          return false
+    ts.install(ensure_installed)
+
+    vim.api.nvim_create_autocmd('FileType', {
+      group = vim.api.nvim_create_augroup('treesitter-setup', { clear = true }),
+      callback = function(ev)
+        local buf = ev.buf
+        local lang = vim.treesitter.language.get_lang(ev.match)
+        if not lang then
+          return
         end
 
-        added[lang] = true
+        if not pcall(vim.treesitter.language.add, lang) then
+          -- Parser not installed: trigger a non-blocking background install.
+          -- Highlighting will work on the next buffer open for this filetype.
+          ts.install({ lang })
+          return
+        end
 
-        return true
-      end, opts.ensure_installed)
-    end
+        -- pcall guards against filetypes where language.add succeeds but no
+        -- usable parser exists (e.g. fzf-lua's "fzf" filetype).
+        if not pcall(vim.treesitter.start, buf, lang) then
+          return
+        end
 
-    require('nvim-treesitter.configs').setup(opts)
+        vim.bo[buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+        vim.wo[0][0].foldmethod = 'expr'
+        vim.wo[0][0].foldexpr = 'v:lua.vim.treesitter.foldexpr()'
+        vim.wo[0][0].foldlevel = 99
+      end,
+    })
   end,
 }

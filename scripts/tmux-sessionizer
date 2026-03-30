@@ -5,7 +5,7 @@
 if [[ $# -eq 1 ]]; then
     selected=$1
 else
-    selected=$(fd --hidden --no-ignore --type d --max-depth 2 --prune '^.git$' "$HOME" "$HOME/coding" "$HOME/notes" --exec dirname | sort -u | fzf)
+    selected=$(find "$HOME" "$HOME/coding" "$HOME/coding/origin" "$HOME/coding/pocs" "$HOME/coding/victorlacorte" "$HOME/notes" -maxdepth 2 -type d -name .git -print | xargs -n1 dirname | sort -u | fzf)
 fi
 
 if [[ -z $selected ]]; then
