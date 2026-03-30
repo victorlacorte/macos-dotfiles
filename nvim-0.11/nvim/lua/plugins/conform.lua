@@ -18,13 +18,12 @@ return {
   ---@type conform.setupOpts
   opts = {
     formatters_by_ft = {
-      javascript = { 'prettierd' },
-      javascriptreact = { 'prettierd' },
+      javascript = { 'oxfmt' },
+      javascriptreact = { 'oxfmt' },
       lua = { 'stylua' },
-      markdown = { 'prettierd' },
-      typescript = { 'prettierd' },
-      typescriptreact = { 'prettierd' },
-      markdown = { 'prettierd' },
+      markdown = { 'oxfmt' },
+      typescript = { 'oxfmt' },
+      typescriptreact = { 'oxfmt' },
     },
     default_format_opts = {
       lsp_format = 'fallback',
