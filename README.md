@@ -19,3 +19,7 @@ XDG_CONFIG_HOME=./nvim-0.11/ nvim nvim-0.11/nvim/init.lua
 ## TODO
 
 - Attempt to move back lsp from the `after` dir
+
+## Requirements
+
+- `brew install tree-sitter-cli`

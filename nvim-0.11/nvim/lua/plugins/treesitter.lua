@@ -32,6 +32,8 @@ return {
       'elixir',
       'heex',
       'eex',
+
+      'swift',
     }
 
     ts.install(ensure_installed)
