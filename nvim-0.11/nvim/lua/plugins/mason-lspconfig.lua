@@ -21,6 +21,7 @@ return {
     },
   },
   init = function()
+    vim.lsp.enable('sourcekit')
     -- vim.lsp.config('ts_go_ls', {
     --   cmd = { '/Users/victor/coding/typescript-go/built/local/tsgo', '--lsp', '--stdio' },
     --   filetypes = {

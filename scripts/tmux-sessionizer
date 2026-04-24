@@ -1,14 +1,14 @@
-#!/usr/bin/env bash
+#!/bin/sh
 
 # Adapted from ThePrimeagen: https://github.com/ThePrimeagen/.dotfiles/blob/master/bin/.local/scripts/tmux-sessionizer
 
 if [[ $# -eq 1 ]]; then
     selected=$1
 else
-    selected=$(find "$HOME" "$HOME/coding" "$HOME/coding/origin" "$HOME/coding/pocs" "$HOME/coding/victorlacorte" "$HOME/notes" -maxdepth 2 -type d -name .git -print | xargs -n1 dirname | sort -u | fzf)
+    selected=$(find "$HOME" "$HOME/coding" "$HOME/coding/origin" "$HOME/coding/pocs" "$HOME/coding/victorlacorte" "$HOME/notes" -maxdepth 2 -type d -name .git -print 2> /dev/null | xargs -n1 dirname | sort -u | fzf)
 fi
 
-if [[ -z $selected ]]; then
+if [ -z $selected ]; then
     exit 0
 fi
 
@@ -18,7 +18,7 @@ if ! tmux has-session -t="$selected_name" 2>/dev/null; then
     tmux new-session -ds "$selected_name" -c "$selected"
 fi
 
-if [[ -z "$TMUX" ]]; then
+if [ -z "$TMUX" ]; then
     tmux attach-session -t "$selected_name"
 else
     tmux switch-client -t "$selected_name"
