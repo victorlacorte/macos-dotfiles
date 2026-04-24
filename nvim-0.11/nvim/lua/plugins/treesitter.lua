@@ -19,10 +19,17 @@ return {
       'luap',
       'markdown',
       'markdown_inline',
+      'terraform',
       'vim',
       'vimdoc',
       'yaml',
 
+      'diff',
+      'git_config',
+      'git_rebase',
+      'gitcommit',
+
+      'html',
       'css',
       'javascript',
       'jsdoc',
@@ -34,6 +41,8 @@ return {
       'eex',
 
       'swift',
+
+      'c_sharp',
     }
 
     ts.install(ensure_installed)
