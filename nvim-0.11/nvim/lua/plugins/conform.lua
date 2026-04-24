@@ -30,6 +30,11 @@ return {
     },
     -- Customize formatters
     formatters = {
+      oxfmt = {
+        cwd = function(_, ctx)
+          return vim.fs.root(ctx.dirname, { '.oxfmtrc.json' })
+        end,
+      },
       shfmt = {
         prepend_args = { '-i', '2' },
       },
