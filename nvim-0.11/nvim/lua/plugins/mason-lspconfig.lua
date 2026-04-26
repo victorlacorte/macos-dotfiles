@@ -18,25 +18,26 @@ return {
       'lua_ls',
       'oxlint',
       'tailwindcss',
-      -- 'ts_ls',
+      'ts_ls',
     },
   },
   init = function()
-    vim.lsp.config('ts_go_ls', {
-      cmd = { '/Users/victor/coding/typescript-go/built/local/tsgo', '--lsp', '--stdio' },
-      filetypes = {
-        'javascript',
-        'javascriptreact',
-        'javascript.jsx',
-        'typescript',
-        'typescriptreact',
-        'typescript.tsx',
-      },
-      root_markers = { 'tsconfig.base.json', 'tsconfig.json', 'package.json', '.git' },
-    })
+    -- vim.lsp.config('ts_go_ls', {
+    --   cmd = { '/Users/victor/coding/typescript-go/built/local/tsgo', '--lsp', '--stdio' },
+    --   filetypes = {
+    --     'javascript',
+    --     'javascriptreact',
+    --     'javascript.jsx',
+    --     'typescript',
+    --     'typescriptreact',
+    --     'typescript.tsx',
+    --   },
+    --   root_markers = { 'tsconfig.base.json', 'tsconfig.json', 'package.json', '.git' },
+    -- })
+    -- vim.lsp.enable('ts_go_ls')
 
+    vim.lsp.enable('racket_ls')
     vim.lsp.enable('sourcekit')
-    vim.lsp.enable('ts_go_ls')
 
     vim.api.nvim_create_autocmd('LspAttach', {
       group = vim.api.nvim_create_augroup('kickstart-lsp-attach', { clear = true }),
