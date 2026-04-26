@@ -18,10 +18,12 @@ return {
   ---@type conform.setupOpts
   opts = {
     formatters_by_ft = {
-      javascript = { 'oxfmt' },
-      javascriptreact = { 'oxfmt' },
+      go = { 'gofmt' },
       lua = { 'stylua' },
       markdown = { 'oxfmt' },
+
+      javascript = { 'oxfmt' },
+      javascriptreact = { 'oxfmt' },
       typescript = { 'oxfmt' },
       typescriptreact = { 'oxfmt' },
     },

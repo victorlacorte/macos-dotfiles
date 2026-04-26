@@ -12,6 +12,7 @@ return {
       'astro',
       'cssls',
       'elixirls',
+      'gopls',
       'html',
       'jsonls',
       'lua_ls',
