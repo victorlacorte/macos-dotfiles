@@ -40,6 +40,11 @@ return {
       'heex',
       'eex',
 
+      'go',
+      'gomod',
+      'gosum',
+      'gowork',
+
       'swift',
 
       'c_sharp',
