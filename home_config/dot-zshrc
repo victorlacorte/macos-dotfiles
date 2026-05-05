@@ -15,6 +15,9 @@ fi
 export FZF_CTRL_R_OPTS="--height 40% --reverse --border --tiebreak=index"
 source <(fzf --zsh)
 
+# mise
+eval "$(~/.local/bin/mise activate zsh)"
+
 # Aliases
 alias ls='ls --color=auto'
 alias ll='ls -lhAF'
