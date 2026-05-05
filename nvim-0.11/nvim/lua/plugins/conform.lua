@@ -21,6 +21,7 @@ return {
       go = { 'gofmt' },
       lua = { 'stylua' },
       markdown = { 'oxfmt' },
+      json = { 'jq' },
 
       javascript = { 'oxfmt' },
       javascriptreact = { 'oxfmt' },
