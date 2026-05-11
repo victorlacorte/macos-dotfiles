@@ -5,7 +5,8 @@ return {
       -- https://github.com/styled-components/typescript-styled-plugin
       {
         name = '@styled/typescript-styled-plugin',
-        location = vim.fn.trim(vim.fn.system('npm root -g')) .. '/typescript-styled-plugin/lib/index.js',
+        location = vim.fn.trim(vim.fn.system('mise where npm:@styled/typescript-styled-plugin'))
+          .. '/lib/node_modules/@styled/typescript-styled-plugin/lib/index.js',
       },
     },
     preferences = {
