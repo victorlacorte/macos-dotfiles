@@ -27,6 +27,9 @@ return {
       javascriptreact = { 'oxfmt' },
       typescript = { 'oxfmt' },
       typescriptreact = { 'oxfmt' },
+
+      sh = { 'shfmt' },
+      bash = { 'shfmt' },
     },
     default_format_opts = {
       lsp_format = 'fallback',
@@ -39,7 +42,7 @@ return {
         end,
       },
       shfmt = {
-        prepend_args = { '-i', '2' },
+        prepend_args = { '-i', '2', '-ci', '-bn' },
       },
     },
   },
