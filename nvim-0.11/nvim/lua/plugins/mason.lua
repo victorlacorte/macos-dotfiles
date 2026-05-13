@@ -13,6 +13,7 @@ return {
     ensure_installed = {
       'eslint_d',
       'oxfmt',
+      'shfmt',
       'stylua',
     },
   },
