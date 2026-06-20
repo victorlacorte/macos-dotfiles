@@ -20,7 +20,7 @@ return {
     formatters_by_ft = {
       go = { 'gofmt' },
       lua = { 'stylua' },
-      markdown = { 'oxfmt' },
+      markdown = { 'oxfmt', 'injected' },
       json = { 'jq' },
 
       javascript = { 'oxfmt' },
