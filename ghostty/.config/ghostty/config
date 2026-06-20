@@ -2,10 +2,10 @@
 font-family = JetBrains Mono NL
 # font-feature = -liga
 # font-feature = -calt
-font-size = 20
+font-size = 16
 background-opacity = 0.9
 macos-titlebar-style = transparent
 
-# https://ghostty.org/docs/features/theme#built-in-themes
-# https://iterm2colorschemes.com/
+# https://ghostty.org/docs/features/theme#built-in-themes (sourced from
+# https://iterm2colorschemes.com/)
 theme = TokyoNight Night
