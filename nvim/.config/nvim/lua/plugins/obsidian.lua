@@ -4,18 +4,15 @@ return {
   'obsidian-nvim/obsidian.nvim',
   version = '*',
   lazy = true,
-  ft = 'markdown',
   event = {
-    'BufReadPre ' .. notes_path,
-    'BufNewFile ' .. notes_path,
+    'BufReadPre ' .. notes_path .. '*.md',
+    'BufNewFile ' .. notes_path .. '*.md',
   },
   ---@module 'obsidian'
   ---@type obsidian.config
   opts = {
     completion = {
-      blink = true,
       min_chars = 2,
-      nvim_cmp = false,
     },
     legacy_commands = false,
     workspaces = {
