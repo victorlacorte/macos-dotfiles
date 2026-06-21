@@ -18,6 +18,7 @@ return {
       'lua_ls',
       'oxlint',
       'tailwindcss',
+      'templ',
       'ts_ls',
     },
   },

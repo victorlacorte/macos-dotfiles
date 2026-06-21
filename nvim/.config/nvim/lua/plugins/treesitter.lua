@@ -44,6 +44,7 @@ return {
       'gomod',
       'gosum',
       'gowork',
+      'templ',
 
       'swift',
 
