@@ -21,6 +21,9 @@ return {
         path = notes_path,
       },
     },
+    daily_notes = {
+      folder = 'dailies',
+    },
   },
   -- config = function(_, opts)
   --   require('obsidian').setup(opts)

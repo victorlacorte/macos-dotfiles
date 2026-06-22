@@ -43,7 +43,9 @@ return {
       'go',
       'gomod',
       'gosum',
+      'gotmpl',
       'gowork',
+      'helm',
       'templ',
 
       'swift',
