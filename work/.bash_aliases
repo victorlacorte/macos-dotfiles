@@ -1,0 +1,6 @@
+alias grep='grep --color=auto'
+alias ls='ls --color=auto'
+alias ll='ls -lhAF'
+alias vim='nvim'
+alias vi='nvim'
+alias pn='pnpm'
