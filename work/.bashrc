@@ -1,0 +1,76 @@
+command_exists() {
+  command -v "$@" >/dev/null 2>&1
+}
+
+# If not running interactively, don't do anything
+case $- in
+*i*) ;;
+*) return ;;
+esac
+
+# don't put duplicate lines or lines starting with space in the history.
+# See bash(1) for more options
+HISTCONTROL=ignoreboth
+
+# append to the history file, don't overwrite it
+shopt -s histappend
+
+# for setting history length see HISTSIZE and HISTFILESIZE in bash(1)
+HISTSIZE=1000
+HISTFILESIZE=2000
+
+# check the window size after each command and, if necessary,
+# update the values of LINES and COLUMNS.
+shopt -s checkwinsize
+
+# enable the spell checker
+shopt -s cdspell
+
+# If set, the pattern "**" used in a pathname expansion context will
+# match all files and zero or more directories and subdirectories.
+#shopt -s globstar
+
+# set a fancy prompt (non-color, unless we know we "want" color)
+case "$TERM" in
+xterm-color | *-256color) color_prompt=yes ;;
+esac
+
+if command_exists brew; then
+  HOMEBREW_PREFIX="$(brew --prefix)"
+
+  if [[ -r "${HOMEBREW_PREFIX}/etc/profile.d/bash_completion.sh" ]]; then
+    . "${HOMEBREW_PREFIX}/etc/profile.d/bash_completion.sh"
+  else
+    for COMPLETION in "${HOMEBREW_PREFIX}/etc/bash_completion.d/"*; do
+      [[ -r "${COMPLETION}" ]] && source "${COMPLETION}"
+    done
+  fi
+fi
+
+# NOTE it seems bash_completion already provides Git completion
+# if [ -f "$HOME/.config/git/git-completion.bash" ]; then
+#   . "$HOME/.config/git/git-completion.bash"
+# fi
+
+eval "$(~/.local/bin/mise activate bash)"
+
+# if command_exists oh-my-posh; then
+#   eval "$(oh-my-posh init bash --config $HOME/.config/oh-my-posh/themes/takuya-modified.json)"
+# fi
+
+eval "$(starship init bash)"
+
+if [ -f "$HOME/.bash_aliases" ]; then
+  . "$HOME/.bash_aliases"
+fi
+
+eval "$(zoxide init bash)"
+
+# Set up fzf key bindings and fuzzy completion
+export FZF_CTRL_R_OPTS="--height 40% --reverse --border --tiebreak=index"
+eval "$(fzf --bash)"
+# source <(fzf --bash)
+
+if [ -f "$HOME/.env.local" ]; then
+  . "$HOME/.env.local"
+fi
