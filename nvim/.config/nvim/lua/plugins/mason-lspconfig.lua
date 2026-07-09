@@ -19,26 +19,17 @@ return {
       'oxlint',
       'tailwindcss',
       'templ',
-      'ts_ls',
+    },
+    automatic_enable = {
+      exclude = { 'ts_ls', 'vtsls' },
     },
   },
   init = function()
-    -- vim.lsp.config('ts_go_ls', {
-    --   cmd = { '/Users/victor/coding/typescript-go/built/local/tsgo', '--lsp', '--stdio' },
-    --   filetypes = {
-    --     'javascript',
-    --     'javascriptreact',
-    --     'javascript.jsx',
-    --     'typescript',
-    --     'typescriptreact',
-    --     'typescript.tsx',
-    --   },
-    --   root_markers = { 'tsconfig.base.json', 'tsconfig.json', 'package.json', '.git' },
-    -- })
-    -- vim.lsp.enable('ts_go_ls')
+    local utils = require('lacorte.utils')
 
     vim.lsp.enable('racket_ls')
     vim.lsp.enable('sourcekit')
+    vim.lsp.enable('tsgo')
 
     vim.api.nvim_create_autocmd('LspAttach', {
       group = vim.api.nvim_create_augroup('kickstart-lsp-attach', { clear = true }),
@@ -52,7 +43,28 @@ return {
 
         -- Rename the variable under your cursor.
         --  Most Language Servers support renaming across files, etc.
-        map('<leader>rn', vim.lsp.buf.rename, '[R]e[n]ame')
+        map('<leader>rn', function()
+          local has_tsgo = #vim.lsp.get_clients({ bufnr = event.buf, name = 'tsgo' }) > 0
+
+          if has_tsgo then
+            local old_name = vim.fn.expand('<cword>')
+            if old_name == nil or old_name == '' then
+              return
+            end
+
+            local new_name = vim.fn.input('Rename "' .. old_name .. '" to: ', old_name)
+            if new_name == nil or new_name == '' or new_name == old_name then
+              return
+            end
+
+            utils.rename_current_buffer(old_name, new_name, event.buf)
+            utils.rename_quickfix_buffers(old_name, new_name)
+
+            return
+          end
+
+          return vim.lsp.buf.rename(nil, { bufnr = event.buf })
+        end, '[R]e[n]ame')
 
         -- Execute a code action, usually your cursor needs to be on top of an error
         -- or a suggestion from your LSP for this to activate.

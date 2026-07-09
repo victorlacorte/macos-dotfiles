@@ -2,3 +2,4 @@
 node = "latest"
 "npm:@styled/typescript-styled-plugin" = "latest"
 "npm:corepack" = "latest"
+"npm:serve" = "latest"
