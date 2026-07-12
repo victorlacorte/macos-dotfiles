@@ -11,6 +11,7 @@ return {
     ts.setup({ install_dir = install_dir })
 
     -- Parsers to install at startup (no-op if already present)
+    -- https://github.com/nvim-treesitter/nvim-treesitter/blob/main/SUPPORTED_LANGUAGES.md
     local ensure_installed = {
       'bash',
       'json',
@@ -19,7 +20,9 @@ return {
       'luap',
       'markdown',
       'markdown_inline',
+      'sql',
       'terraform',
+      'toml',
       'vim',
       'vimdoc',
       'yaml',
