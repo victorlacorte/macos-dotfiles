@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+
+# Adapted from craftzdog/tmux-claude-session-manager.
+# See THIRD_PARTY_NOTICES.md for MIT license attribution.
+
+get_tmux_option() {
+  local value
+  value="$(tmux show-option -gqv "$1" 2>/dev/null)"
+  if [ -n "$value" ]; then
+    printf '%s' "$value"
+  else
+    printf '%s' "$2"
+  fi
+}
+
+file_mtime() {
+  stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null
+}
+
+claude_transcript_mtime() {
+  local base f
+  base="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+  for f in "$base"/projects/*/"$1".jsonl; do
+    [ -f "$f" ] && {
+      file_mtime "$f"
+      return
+    }
+  done
+}
