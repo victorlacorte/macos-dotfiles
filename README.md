@@ -9,6 +9,17 @@ brew install tree-sitter-cli
 brew install fzf
 ```
 
+The tmux agent picker source lives in `tools/agent-picker` and requires Go 1.22
+or newer. Build and install it locally from the repository root with:
+
+```sh
+make install-agent-picker
+```
+
+This installs `agent-picker` in `$HOME/.local/bin`. Re-run the command after
+updating these dotfiles to rebuild the binary. The binary is a local build
+artifact and is not committed.
+
 ## Tmux
 
 `prefix Space` opens the project sessionizer.
@@ -24,10 +35,21 @@ processes to tmux panes through their TTYs, so its conservative status is always
 `running`. Its age comes from the newest open
 `$CODEX_HOME/sessions/**/rollout-*.jsonl` when `lsof` is available.
 
-Only tmux 3.2 or newer and `fzf` are required for the picker. Claude Code and
-`jq` enable the Claude provider; Codex enables the Codex provider; and `lsof`
-adds Codex activity ages. A missing optional command disables only that provider
-or metadata. `claude-agent-picker` remains available as a Claude-only wrapper.
+Only tmux 3.2 or newer and `fzf` are required at runtime. Claude Code enables
+the Claude provider; Codex enables the Codex provider; and `lsof` adds Codex
+activity ages. Claude JSON is decoded directly, so `jq` is no longer required.
+A missing optional command disables only that provider or metadata.
+
+The command requires an explicit action and accepts an optional provider:
+
+```text
+agent-picker popup [-provider all|claude|codex] [TMUX_CLIENT]
+agent-picker select [-provider all|claude|codex]
+agent-picker list [-provider all|claude|codex]
+```
+
+Both `-provider` and `--provider` are accepted.
+For `popup`, place the provider flag before `TMUX_CLIENT`.
 
 The generic tmux options and defaults are:
 
@@ -40,16 +62,18 @@ set -g @codex_agent_process_name 'codex'
 set -g @codex_agent_session_prefix 'codex-'
 ```
 
-Existing `@claude_agent_command`, `@claude_agent_session_prefix`,
-`@claude_agent_popup_width`, `@claude_agent_popup_height`,
-`@claude_agent_fzf_options`, and `@claude_agent_parent` settings remain
-supported. Generic popup/fzf options fall back to the old Claude values when
-unset. Sessions prefixed with either `claude-` or `codex-` retain the dedicated
-popup navigation behavior; agents in other sessions are focused in place.
+Provider-specific `@claude_agent_command` and
+`@claude_agent_session_prefix` settings remain supported, as do
+`@claude_agent_origin`, `@codex_agent_origin`, and their `@agent_origin`
+fallback. Popup, fzf, and parent-client behavior uses only the generic options
+shown above. Sessions prefixed with either `claude-` or `codex-` retain the
+dedicated popup navigation behavior; agents in other sessions are focused in
+place.
 
-The provider adapters share a normalized row boundary, so a future Codex
-app-server adapter can replace passive process discovery and add accurate
-working/waiting/idle states without changing the picker UI.
+The provider adapters use structured Go values internally and only format TSV
+at the fzf boundary, so a future Codex app-server adapter can replace passive
+process discovery and add accurate working/waiting/idle states without changing
+the picker UI.
 
 The Claude metadata adapter is adapted from
 `craftzdog/tmux-claude-session-manager`; see `THIRD_PARTY_NOTICES.md` for the

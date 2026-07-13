@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-
-# Claude-only compatibility wrapper for the generic selector.
-
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec "$DIR/agent-select" --provider claude --legacy-claude "$@"

@@ -48,6 +48,7 @@ return {
       'gosum',
       'gotmpl',
       'gowork',
+      'make',
       'helm',
       'templ',
 

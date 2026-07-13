@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-
-[ "${1:-}" = agents ] && [ "${2:-}" = --json ] || exit 1
-printf '%s\n' "${AGENT_TEST_CLAUDE_JSON:-[]}"

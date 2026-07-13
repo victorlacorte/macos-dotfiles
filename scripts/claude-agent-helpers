@@ -1,7 +1,0 @@
-#!/usr/bin/env bash
-
-# Compatibility source for scripts or local configuration that still references
-# the old helper name.
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=agent-helpers
-. "$DIR/agent-helpers"
