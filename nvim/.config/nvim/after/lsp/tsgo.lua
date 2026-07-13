@@ -1,30 +1,21 @@
-local function resolve_tsgo_cmd(root_dir)
-  if root_dir then
-    local local_tsc = root_dir .. '/node_modules/.bin/tsc'
-
-    if vim.fn.executable(local_tsc) == 1 then
-      return { local_tsc, '--lsp', '--stdio' }
-    end
-  end
-
-  local global_tsc = vim.fn.exepath('tsc')
-
-  if global_tsc ~= '' then
-    return { global_tsc, '--lsp', '--stdio' }
-  end
-
-  return nil
-end
-
 return {
-  cmd = resolve_tsgo_cmd(vim.fs.root(0, {
-    'tsconfig.base.json',
-    'tsconfig.json',
-    'package.json',
-    '.git',
-  })),
+  cmd = function(dispatchers, config)
+    local root_dir = config.root_dir
+    local candidates = {
+      vim.fs.joinpath(root_dir, 'node_modules/typescript-7/bin/tsc'),
+      vim.fs.joinpath(root_dir, 'node_modules/.bin/tsc'),
+    }
 
-  on_new_config = function(new_config, root_dir)
-    new_config.cmd = resolve_tsgo_cmd(root_dir)
+    for _, candidate in ipairs(candidates) do
+      if vim.fn.executable(candidate) == 1 then
+        return vim.lsp.rpc.start({ candidate, '--lsp', '--stdio' }, dispatchers, {
+          cwd = config.cmd_cwd,
+          env = config.cmd_env,
+          detached = config.detached,
+        })
+      end
+    end
+
+    error(('No local TypeScript executable found for tsgo workspace %q'):format(root_dir))
   end,
 }
