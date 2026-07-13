@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+[ "${AGENT_TEST_JQ_FAIL:-0}" = 0 ] || exit 127
+[ -n "${AGENT_TEST_REAL_JQ:-}" ] || exit 127
+exec "$AGENT_TEST_REAL_JQ" "$@"

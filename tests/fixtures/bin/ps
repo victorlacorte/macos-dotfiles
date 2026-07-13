@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+case " $* " in
+*ppid*)
+  printf '%s\n' "${AGENT_TEST_PS:-}"
+  ;;
+*)
+  while read -r pid _ tty _; do
+    [ -n "$pid" ] && printf '%s %s\n' "$pid" "$tty"
+  done <<<"${AGENT_TEST_PS:-}"
+  ;;
+esac

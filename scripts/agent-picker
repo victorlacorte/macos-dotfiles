@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+
+# Open the mixed agent picker in a tmux popup.
+
+set -uo pipefail
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=agent-helpers
+. "$DIR/agent-helpers"
+
+provider='all'
+legacy_claude=false
+me=''
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+  --provider)
+    provider="${2:-all}"
+    shift 2
+    ;;
+  --legacy-claude)
+    legacy_claude=true
+    shift
+    ;;
+  *)
+    me="$1"
+    shift
+    ;;
+  esac
+done
+
+if ! command -v tmux >/dev/null 2>&1; then
+  printf '%s\n' 'agent-picker: tmux is required' >&2
+  exit 0
+fi
+
+claude_prefix="$(get_tmux_option @claude_agent_session_prefix 'claude-')"
+codex_prefix="$(get_tmux_option @codex_agent_session_prefix 'codex-')"
+if $legacy_claude; then
+  w="$(get_tmux_option @claude_agent_popup_width '90%')"
+  h="$(get_tmux_option @claude_agent_popup_height '90%')"
+  parent_option='@claude_agent_parent'
+else
+  w="$(get_tmux_option_chain '90%' @agent_popup_width @claude_agent_popup_width)"
+  h="$(get_tmux_option_chain '90%' @agent_popup_height @claude_agent_popup_height)"
+  parent_option='@agent_parent'
+fi
+
+my_session="$(tmux list-clients -F '#{client_name} #{session_name}' 2>/dev/null |
+  awk -v me="$me" '$1 == me { print $2; exit }')"
+
+dedicated=false
+case "$provider:$my_session" in
+claude:"$claude_prefix"* | all:"$claude_prefix"* | codex:"$codex_prefix"* | all:"$codex_prefix"*)
+  dedicated=true
+  ;;
+esac
+
+if $dedicated; then
+  tmux detach-client -s "$my_session"
+  for ((i = 0; i < 100; i++)); do
+    tmux list-clients -F '#{session_name}' 2>/dev/null |
+      awk -v session="$my_session" '$0 == session { found = 1 } END { exit !found }' || break
+    sleep 0.05
+  done
+  host="$(tmux show-options -gqv "$parent_option" 2>/dev/null)"
+else
+  host="$me"
+  [ -n "$host" ] && tmux set-option -g "$parent_option" "$host"
+fi
+
+printf -v popup_command '%q --provider %q' "$DIR/agent-select" "$provider"
+$legacy_claude && popup_command+=' --legacy-claude'
+
+if [ -n "$host" ]; then
+  tmux display-popup -c "$host" -w "$w" -h "$h" -E "$popup_command"
+else
+  tmux display-popup -w "$w" -h "$h" -E "$popup_command"
+fi

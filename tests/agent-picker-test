@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+FIXTURES="$ROOT/tests/fixtures/bin"
+REAL_JQ="$(command -v jq || true)"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+fail() {
+  printf 'not ok - %s\n' "$1" >&2
+  exit 1
+}
+
+assert_contains() {
+  case "$1" in
+  *"$2"*) ;;
+  *) fail "$3" ;;
+  esac
+}
+
+assert_not_contains() {
+  case "$1" in
+  *"$2"*) fail "$3" ;;
+  *) ;;
+  esac
+}
+
+assert_lines() {
+  actual=$(printf '%s\n' "$1" | awk 'NF { count++ } END { print count + 0 }')
+  [ "$actual" -eq "$2" ] || fail "$3 (expected $2, got $actual)"
+}
+
+export PATH="$FIXTURES:$PATH"
+export AGENT_TEST_REAL_JQ="$REAL_JQ"
+export HOME="$tmp/home"
+export CODEX_HOME="$tmp/codex home"
+export CLAUDE_CONFIG_DIR="$tmp/claude home"
+mkdir -p "$CODEX_HOME/sessions/2026/07/13" \
+  "$CLAUDE_CONFIG_DIR/projects/project-one" \
+  "$CLAUDE_CONFIG_DIR/projects/project-two" \
+  "$CLAUDE_CONFIG_DIR/projects/project-three"
+
+wait_transcript="$CLAUDE_CONFIG_DIR/projects/project-one/wait-id.jsonl"
+idle_transcript="$CLAUDE_CONFIG_DIR/projects/project-two/idle-id.jsonl"
+busy_transcript="$CLAUDE_CONFIG_DIR/projects/project-three/busy-id.jsonl"
+printf '{}\n' >"$wait_transcript"
+printf '{}\n' >"$idle_transcript"
+printf '{}\n' >"$busy_transcript"
+touch -t 202607130301 "$wait_transcript"
+touch -t 202607130302 "$idle_transcript"
+touch -t 202607130303 "$busy_transcript"
+wait_mtime=$(stat -f %m "$wait_transcript" 2>/dev/null || stat -c %Y "$wait_transcript")
+
+rollout_old="$CODEX_HOME/sessions/2026/07/13/rollout-old.jsonl"
+rollout_new="$CODEX_HOME/sessions/2026/07/13/rollout-new.jsonl"
+printf '{}\n' >"$rollout_old"
+printf '{}\n' >"$rollout_new"
+touch -t 202607130101 "$rollout_old"
+touch -t 202607130202 "$rollout_new"
+rollout_new_mtime=$(stat -f %m "$rollout_new" 2>/dev/null || stat -c %Y "$rollout_new")
+
+export AGENT_TEST_PS=$'100 1 ttys001 /usr/local/bin/claude\n101 1 ttys002 claude\n102 1 ttys003 claude\n200 1 ttys004 /mock/codex\n201 200 ttys004 /mock/codex\n206 1 ttys004 codex\n202 1 ttys005 codex\n203 1 ttys006 codex-helper\n204 1 ttys006 node\n205 1 ?? codex'
+export AGENT_TEST_PANES=$'/dev/ttys001\t%1\twork\twork:1.1\t/tmp/ignored\n/dev/ttys002\t%2\tclaude-two\tclaude-two:1.1\t/tmp/ignored\n/dev/ttys003\t%3\twork\twork:2.1\t/tmp/ignored\n/dev/ttys004\t%4\tcodex-four\tcodex-four:1.1\t/Users/example/Project With Spaces\n/dev/ttys005\t%5\twork\twork:3.1\t/tmp/another path\n/dev/ttys006\t%6\twork\twork:4.1\t/tmp/helper'
+export AGENT_TEST_CLAUDE_JSON='[
+  {"pid":100,"status":"waiting","sessionId":"wait-id","cwd":"/tmp/Waiting Project","kind":"interactive"},
+  {"pid":101,"status":"idle","sessionId":"idle-id","cwd":"/tmp/Idle Project","kind":"interactive"},
+  {"pid":102,"status":"busy","sessionId":"busy-id","cwd":"/tmp/Busy Project","kind":"interactive"},
+  {"pid":999,"status":"idle","sessionId":"hidden-id","cwd":"/tmp/not-in-tmux","kind":"interactive"},
+  {"pid":998,"status":"busy","sessionId":"worker-id","cwd":"/tmp/worker","kind":"background"}
+]'
+export AGENT_TEST_LSOF_200="p200
+n$rollout_old
+n$rollout_new
+n$CODEX_HOME/sessions/2026/07/13/not-a-rollout.log"
+export AGENT_TEST_LSOF_202='p202'
+
+if [ -n "$REAL_JQ" ]; then
+  claude_rows=$("$ROOT/scripts/claude-agent-rows")
+  assert_lines "$claude_rows" 3 'Claude adapter emits interactive tmux agents'
+  assert_contains "$claude_rows" $'claude\t%1\t100\tloose\twaiting\t' 'Claude waiting state and loose kind'
+  assert_contains "$claude_rows" "$wait_mtime" 'Claude activity uses transcript mtime'
+  assert_contains "$claude_rows" $'claude\t%2\t101\tdedicated\tidle\t' 'Claude idle state and dedicated kind'
+  assert_contains "$claude_rows" $'claude\t%3\t102\tloose\tworking\t' 'Claude busy state normalizes to working'
+  assert_contains "$claude_rows" '/tmp/Waiting Project' 'Claude paths retain spaces'
+fi
+
+codex_rows=$("$ROOT/scripts/codex-agent-rows")
+assert_lines "$codex_rows" 2 'Codex emits one row per TUI pane'
+assert_contains "$codex_rows" $'codex\t%4\t200\tdedicated\trunning\t' 'Codex keeps the outer process and dedicated kind'
+assert_contains "$codex_rows" "$rollout_new_mtime" 'Codex chooses newest open rollout mtime'
+assert_contains "$codex_rows" 'Project With Spaces' 'Codex paths retain spaces'
+assert_contains "$codex_rows" $'codex\t%5\t202\tloose\trunning\t-\t' 'Codex works without a rollout file'
+assert_not_contains "$codex_rows" $'\t201\t' 'Exact-name child process is excluded'
+assert_not_contains "$codex_rows" $'\t203\t' 'Helper process is excluded'
+assert_not_contains "$codex_rows" $'\t206\t' 'Duplicate process on a pane is excluded'
+
+mixed_rows=$("$ROOT/scripts/agent-rows")
+assert_contains "$(printf '%s\n' "$mixed_rows" | sed -n '1p')" $'\tclaude\t' 'Waiting Claude sorts first'
+assert_contains "$(printf '%s\n' "$mixed_rows" | sed -n '$p')" $'\tclaude\tworking\t' 'Working Claude sorts last'
+assert_contains "$mixed_rows" $'\tcodex\trunning\t' 'Mixed rows display the Codex provider and state'
+
+export AGENT_TEST_CLAUDE_COMMAND='missing-claude-command'
+codex_only=$("$ROOT/scripts/agent-rows")
+assert_lines "$codex_only" 2 'Missing Claude disables only the Claude provider'
+assert_contains "$codex_only" $'\tcodex\trunning\t' 'Codex remains available without Claude'
+
+export AGENT_TEST_CLAUDE_COMMAND='claude'
+export AGENT_TEST_JQ_FAIL=1
+jq_missing=$("$ROOT/scripts/agent-rows")
+assert_lines "$jq_missing" 2 'Unavailable jq disables only the Claude provider'
+assert_contains "$jq_missing" $'\tcodex\trunning\t' 'Codex remains available without jq'
+export AGENT_TEST_JQ_FAIL=0
+
+export AGENT_TEST_LSOF_FAIL=1
+codex_without_lsof=$("$ROOT/scripts/codex-agent-rows")
+assert_lines "$codex_without_lsof" 2 'Unavailable lsof keeps Codex rows'
+assert_contains "$codex_without_lsof" $'codex\t%4\t200\tdedicated\trunning\t-\t' 'Unavailable lsof degrades age to dash'
+export AGENT_TEST_LSOF_FAIL=0
+
+export AGENT_TEST_CODEX_PROCESS='missing-codex-command'
+claude_only=$("$ROOT/scripts/agent-rows")
+if [ -n "$REAL_JQ" ]; then
+  assert_lines "$claude_only" 3 'Missing Codex disables only the Codex provider'
+fi
+
+export AGENT_TEST_CODEX_PROCESS='codex'
+export AGENT_TEST_FZF_LOG="$tmp/fzf.log"
+export AGENT_TEST_TMUX_LOG="$tmp/tmux.log"
+export AGENT_TEST_FZF_MATCH=$'\t%5\t'
+"$ROOT/scripts/agent-select" --provider codex
+tmux_calls=$(<"$AGENT_TEST_TMUX_LOG")
+assert_contains "$tmux_calls" 'switch-client -t work' 'Enter focuses a loose Codex session'
+assert_contains "$tmux_calls" 'select-pane -t %5' 'Enter focuses the loose Codex pane'
+fzf_calls=$(<"$AGENT_TEST_FZF_LOG")
+assert_contains "$fzf_calls" 'kill {3}' 'Ctrl-X targets the normalized PID field'
+assert_contains "$fzf_calls" 'reload(' 'Ctrl-X reloads provider rows'
+
+: >"$AGENT_TEST_TMUX_LOG"
+export AGENT_TEST_AGENT_PARENT='outer-client'
+export AGENT_TEST_CODEX_ORIGIN='origin-window'
+export AGENT_TEST_FZF_MATCH=$'\t%4\t'
+"$ROOT/scripts/agent-select" --provider codex
+tmux_calls=$(<"$AGENT_TEST_TMUX_LOG")
+assert_contains "$tmux_calls" 'switch-client -c outer-client -t origin-window' 'Dedicated Codex returns the outer client to its origin'
+assert_contains "$tmux_calls" 'attach-session -t codex-four' 'Dedicated Codex resumes in the picker popup'
+
+printf 'ok - agent picker fixtures\n'

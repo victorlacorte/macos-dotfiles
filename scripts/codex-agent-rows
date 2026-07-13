@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+
+# Emit one normalized adapter row per Codex TUI hosted by a tmux pane.
+#
+# provider, pane, pid, session kind, state, activity epoch, location, cwd
+#
+# Codex has no passive equivalent of `claude agents --json`, so exact Codex
+# processes are joined to tmux panes by TTY and conservatively marked running.
+
+set -uo pipefail
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=agent-helpers
+. "$DIR/agent-helpers"
+
+process_name="$(get_tmux_option @codex_agent_process_name 'codex')"
+process_basename="${process_name##*/}"
+prefix="$(get_tmux_option @codex_agent_session_prefix 'codex-')"
+command -v "$process_name" >/dev/null 2>&1 || exit 0
+
+{
+  ps -Ao pid=,ppid=,tty=,comm= 2>/dev/null |
+    awk -v name="$process_basename" '
+      {
+        command = $4
+        for (i = 5; i <= NF; i++) command = command " " $i
+        sub(/^.*\//, "", command)
+        if (command == name) printf "P\t%s\t%s\t%s\n", $1, $2, $3
+      }
+    '
+  tmux list-panes -a -F $'T\t#{pane_tty}\t#{pane_id}\t#{session_name}\t#{session_name}:#{window_index}.#{pane_index}\t#{pane_current_path}' 2>/dev/null
+} | awk -F'\t' -v prefix="$prefix" '
+  $1 == "P" {
+    pid[$2] = $2
+    parent[$2] = $3
+    tty[$2] = $4
+    next
+  }
+  $1 == "T" {
+    sub(/^\/dev\//, "", $2)
+    pane[$2] = $3
+    session[$2] = $4
+    location[$2] = $5
+    path[$2] = $6
+    next
+  }
+  END {
+    for (p in pid) {
+      t = tty[p]
+      if (t == "" || !(t in pane)) continue
+
+      # An exact-name child on the same TTY is not another visible TUI. Keep
+      # the outermost process, then use the oldest PID to collapse odd duplicates.
+      pp = parent[p]
+      if ((pp in pid) && tty[pp] == t) continue
+      if (!(t in chosen) || (p + 0) < (chosen[t] + 0)) chosen[t] = p
+    }
+
+    for (t in chosen) {
+      kind = (index(session[t], prefix) == 1) ? "dedicated" : "loose"
+      printf "codex\t%s\t%s\t%s\trunning\t-\t%s\t%s\n",
+        pane[t], chosen[t], kind, location[t], path[t]
+    }
+  }
+' | while IFS=$'\t' read -r provider pane pid kind state _ location path; do
+  activity="$(codex_rollout_mtime "$pid")"
+  [ -n "$activity" ] || activity='-'
+  if [ "$path" = "$HOME" ] || [[ "$path" == "$HOME/"* ]]; then
+    path="~${path#"$HOME"}"
+  fi
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$provider" "$pane" "$pid" "$kind" "$state" "$activity" "$location" "$path"
+done

@@ -1,40 +1,6 @@
 #!/usr/bin/env bash
 
-# Open the Claude agent picker in a tmux popup.
-# Adapted from craftzdog/tmux-claude-session-manager.
-# See THIRD_PARTY_NOTICES.md for MIT license attribution.
-
-set -uo pipefail
+# Claude-only compatibility wrapper for the generic agent picker.
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=claude-agent-helpers
-. "$DIR/claude-agent-helpers"
-
-prefix="$(get_tmux_option @claude_agent_session_prefix 'claude-')"
-w="$(get_tmux_option @claude_agent_popup_width '90%')"
-h="$(get_tmux_option @claude_agent_popup_height '90%')"
-
-me="${1:-}"
-my_session="$(tmux list-clients -F '#{client_name} #{session_name}' 2>/dev/null |
-  awk -v me="$me" '$1 == me { print $2; exit }')"
-
-case "$my_session" in
-"$prefix"*)
-  tmux detach-client -s "$my_session"
-  for _ in $(seq 1 100); do
-    tmux list-clients -F '#{session_name}' 2>/dev/null | grep -qx "$my_session" || break
-    sleep 0.05
-  done
-  host="$(tmux show-options -gqv @claude_agent_parent 2>/dev/null)"
-  ;;
-*)
-  host="$me"
-  tmux set-option -g @claude_agent_parent "$host"
-  ;;
-esac
-
-if [ -n "$host" ]; then
-  tmux display-popup -c "$host" -w "$w" -h "$h" -E "$DIR/claude-agent-select"
-else
-  tmux display-popup -w "$w" -h "$h" -E "$DIR/claude-agent-select"
-fi
+exec "$DIR/agent-picker" --provider claude --legacy-claude "$@"

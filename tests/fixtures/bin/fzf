@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+[ -n "${AGENT_TEST_FZF_LOG:-}" ] && printf '%s\n' "$*" >>"$AGENT_TEST_FZF_LOG"
+while IFS= read -r row; do
+  case "$row" in
+  *"${AGENT_TEST_FZF_MATCH:-no-match}"*)
+    printf '%s\n' "$row"
+    exit 0
+    ;;
+  esac
+done

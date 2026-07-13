@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+
+# Shared helpers for the mixed Claude Code and Codex tmux agent picker.
+# The Claude metadata helpers are adapted from
+# craftzdog/tmux-claude-session-manager; see THIRD_PARTY_NOTICES.md.
+
+get_tmux_option() {
+  local value
+  value="$(tmux show-option -gqv "$1" 2>/dev/null)"
+  if [ -n "$value" ]; then
+    printf '%s' "$value"
+  else
+    printf '%s' "$2"
+  fi
+}
+
+# get_tmux_option_chain <default> <option>...
+# Return the first non-empty option, allowing generic settings to fall back to
+# their legacy Claude-only equivalents.
+get_tmux_option_chain() {
+  local default="$1" option value
+  shift
+  for option in "$@"; do
+    value="$(tmux show-option -gqv "$option" 2>/dev/null)"
+    if [ -n "$value" ]; then
+      printf '%s' "$value"
+      return
+    fi
+  done
+  printf '%s' "$default"
+}
+
+file_mtime() {
+  stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null
+}
+
+claude_transcript_mtime() {
+  local base f
+  base="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+  for f in "$base"/projects/*/"$1".jsonl; do
+    [ -f "$f" ] && {
+      file_mtime "$f"
+      return
+    }
+  done
+}
+
+# Return the newest mtime among rollout files currently open by a Codex TUI.
+# lsof is optional: without it the adapter still emits the process with no age.
+codex_rollout_mtime() {
+  local pid="$1" base line file mtime
+  command -v lsof >/dev/null 2>&1 || return 0
+  base="${CODEX_HOME:-$HOME/.codex}"
+
+  while IFS= read -r line; do
+    case "$line" in
+    n"$base"/sessions/*/rollout-*.jsonl)
+      file="${line#n}"
+      mtime="$(file_mtime "$file")"
+      [ -n "$mtime" ] && printf '%s\n' "$mtime"
+      ;;
+    esac
+  done < <(lsof -a -p "$pid" -Fn 2>/dev/null) | sort -nr | sed -n '1p'
+}

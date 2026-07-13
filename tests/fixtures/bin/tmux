@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+
+[ -n "${AGENT_TEST_TMUX_LOG:-}" ] && printf '%s\n' "$*" >>"$AGENT_TEST_TMUX_LOG"
+
+case "${1:-}" in
+show-option | show-options)
+  option="${!#}"
+  case "$option" in
+  @claude_agent_command) printf '%s' "${AGENT_TEST_CLAUDE_COMMAND:-claude}" ;;
+  @claude_agent_session_prefix) printf '%s' "${AGENT_TEST_CLAUDE_PREFIX:-claude-}" ;;
+  @codex_agent_process_name) printf '%s' "${AGENT_TEST_CODEX_PROCESS:-codex}" ;;
+  @codex_agent_session_prefix) printf '%s' "${AGENT_TEST_CODEX_PREFIX:-codex-}" ;;
+  @agent_parent) printf '%s' "${AGENT_TEST_AGENT_PARENT:-}" ;;
+  @codex_agent_origin) printf '%s' "${AGENT_TEST_CODEX_ORIGIN:-}" ;;
+  esac
+  ;;
+list-panes)
+  while IFS= read -r pane; do
+    [ -n "$pane" ] && printf 'T\t%s\n' "$pane"
+  done <<<"${AGENT_TEST_PANES:-}"
+  ;;
+display-message)
+  target=''
+  while [ "$#" -gt 0 ]; do
+    if [ "$1" = -t ]; then
+      target="${2:-}"
+      break
+    fi
+    shift
+  done
+  case "$target" in
+  %4) printf '%s' 'codex-four' ;;
+  %5) printf '%s' 'work' ;;
+  esac
+  ;;
+*)
+  exit 0
+  ;;
+esac
