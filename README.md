@@ -40,11 +40,11 @@ the Claude provider; Codex enables the Codex provider; and `lsof` adds Codex
 activity ages. Claude JSON is decoded directly, so `jq` is no longer required.
 A missing optional command disables only that provider or metadata.
 
-When no running agents match the selected provider, the picker shows a concise
-tmux message instead of opening an empty `fzf` interface. The current client
-remains attached and the popup parent state is left unchanged. `agent-picker
-list` remains machine-readable, producing no output and exiting successfully
-for an empty result.
+The popup and `fzf` frame appear immediately while agent discovery runs. When
+no running agents match the selected provider, the empty picker closes and a
+concise tmux message appears on the originating client. `agent-picker list`
+remains machine-readable, producing no output and exiting successfully for an
+empty result.
 
 The command requires an explicit action and accepts an optional provider:
 
@@ -63,7 +63,6 @@ The generic tmux options and defaults are:
 set -g @agent_popup_width       '90%'
 set -g @agent_popup_height      '90%'
 set -g @agent_fzf_options       ''
-set -g @agent_parent            '' # managed internally for popup return
 set -g @codex_agent_process_name 'codex'
 ```
 

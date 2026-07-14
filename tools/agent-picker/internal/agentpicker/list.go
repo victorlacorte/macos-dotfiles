@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -32,20 +33,32 @@ func (a *App) Agents(ctx context.Context, provider string) []Agent {
 }
 
 func (a *App) collectAgents(ctx context.Context, provider string) []Agent {
-	var providers []Provider
+	var collectors []func(context.Context, *discoveryInventory) []Agent
 	switch provider {
 	case "all":
-		providers = []Provider{providerFunc(a.claudeAgents), providerFunc(a.codexAgents)}
+		collectors = []func(context.Context, *discoveryInventory) []Agent{a.collectClaudeAgents, a.collectCodexAgents}
 	case "claude":
-		providers = []Provider{providerFunc(a.claudeAgents)}
+		collectors = []func(context.Context, *discoveryInventory) []Agent{a.collectClaudeAgents}
 	case "codex":
-		providers = []Provider{providerFunc(a.codexAgents)}
+		collectors = []func(context.Context, *discoveryInventory) []Agent{a.collectCodexAgents}
 	default:
 		return nil
 	}
+	inventory := a.startInventory(ctx)
+	results := make([][]Agent, len(collectors))
+	var wg sync.WaitGroup
+	wg.Add(len(collectors))
+	for i, collector := range collectors {
+		go func() {
+			defer wg.Done()
+			results[i] = collector(ctx, inventory)
+		}()
+	}
+	wg.Wait()
+	inventory.wg.Wait()
 	var agents []Agent
-	for _, provider := range providers {
-		agents = append(agents, provider.Agents(ctx)...)
+	for _, result := range results {
+		agents = append(agents, result...)
 	}
 	return agents
 }

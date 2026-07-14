@@ -14,7 +14,7 @@ import (
 type Command struct {
 	Name   string
 	Args   []string
-	Input  string
+	Input  io.Reader
 	Env    map[string]string
 	Stderr io.Writer
 }
@@ -40,7 +40,7 @@ func (OSRunner) LookPath(name string) (string, error) { return exec.LookPath(nam
 func (OSRunner) Run(ctx context.Context, command Command) (string, error) {
 	cmd := exec.CommandContext(ctx, command.Name, command.Args...)
 	var stdout bytes.Buffer
-	cmd.Stdin = bytes.NewBufferString(command.Input)
+	cmd.Stdin = command.Input
 	cmd.Stdout = &stdout
 	cmd.Stderr = command.Stderr
 	if len(command.Env) > 0 {

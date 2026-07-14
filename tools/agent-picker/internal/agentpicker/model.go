@@ -1,7 +1,6 @@
 package agentpicker
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"strconv"
@@ -19,14 +18,6 @@ type Agent struct {
 	Location string
 	Path     string
 }
-
-type Provider interface {
-	Agents(context.Context) []Agent
-}
-
-type providerFunc func(context.Context) []Agent
-
-func (provider providerFunc) Agents(ctx context.Context) []Agent { return provider(ctx) }
 
 func rank(agent Agent) int {
 	switch {
