@@ -14,7 +14,6 @@ type Agent struct {
 	Provider string
 	Pane     string
 	PID      int
-	Kind     string
 	State    string
 	Activity time.Time
 	Location string
@@ -93,8 +92,8 @@ func formatRow(agent Agent, now time.Time, locationWidth, pathWidth int) string 
 	if !agent.Activity.IsZero() {
 		age = strconv.Itoa(ageNumber) + "m"
 	}
-	return fmt.Sprintf("%d\t%s\t%d\t%s\t%s\t%s\t%5s\t%-*s\t%-*s\t%d",
-		rank(agent), agent.Pane, agent.PID, agent.Kind, agent.Provider,
+	return fmt.Sprintf("%d\t%s\t%d\t%s\t%s\t%5s\t%-*s\t%-*s\t%d",
+		rank(agent), agent.Pane, agent.PID, agent.Provider,
 		agent.State, age, locationWidth, agent.Location, pathWidth, agent.Path, ageNumber)
 }
 

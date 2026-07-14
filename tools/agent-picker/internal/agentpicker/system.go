@@ -12,12 +12,11 @@ import (
 )
 
 type Command struct {
-	Name        string
-	Args        []string
-	Input       string
-	Env         map[string]string
-	Stderr      io.Writer
-	Interactive bool
+	Name   string
+	Args   []string
+	Input  string
+	Env    map[string]string
+	Stderr io.Writer
 }
 
 type Runner interface {
@@ -32,7 +31,6 @@ type FileSystem interface {
 
 type Clock interface {
 	Now() time.Time
-	Sleep(time.Duration)
 }
 
 type OSRunner struct{}
@@ -42,15 +40,9 @@ func (OSRunner) LookPath(name string) (string, error) { return exec.LookPath(nam
 func (OSRunner) Run(ctx context.Context, command Command) (string, error) {
 	cmd := exec.CommandContext(ctx, command.Name, command.Args...)
 	var stdout bytes.Buffer
-	if command.Interactive {
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-	} else {
-		cmd.Stdin = bytes.NewBufferString(command.Input)
-		cmd.Stdout = &stdout
-		cmd.Stderr = command.Stderr
-	}
+	cmd.Stdin = bytes.NewBufferString(command.Input)
+	cmd.Stdout = &stdout
+	cmd.Stderr = command.Stderr
 	if len(command.Env) > 0 {
 		env := make([]string, 0, len(os.Environ())+len(command.Env))
 		for _, entry := range os.Environ() {
@@ -75,8 +67,7 @@ func (OSFileSystem) Stat(name string) (os.FileInfo, error) { return os.Stat(name
 
 type RealClock struct{}
 
-func (RealClock) Now() time.Time        { return time.Now() }
-func (RealClock) Sleep(d time.Duration) { time.Sleep(d) }
+func (RealClock) Now() time.Time { return time.Now() }
 
 type App struct {
 	Runner     Runner

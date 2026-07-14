@@ -13,11 +13,10 @@ import (
 // The Claude adapter retains behavior adapted from
 // craftzdog/tmux-claude-session-manager. See THIRD_PARTY_NOTICES.md.
 func (a *App) claudeAgents(ctx context.Context) []Agent {
-	command := a.option(ctx, "@claude_agent_command", "claude")
-	if _, err := a.Runner.LookPath(command); err != nil {
+	if _, err := a.Runner.LookPath("claude"); err != nil {
 		return nil
 	}
-	out, err := a.run(ctx, command, "agents", "--json")
+	out, err := a.run(ctx, "claude", "agents", "--json")
 	if err != nil {
 		return nil
 	}
@@ -34,7 +33,6 @@ func (a *App) claudeAgents(ctx context.Context) []Agent {
 
 	ttys := a.processTTYs(ctx)
 	panes := a.panes(ctx)
-	prefix := a.option(ctx, "@claude_agent_session_prefix", "claude-")
 	config := getenv("CLAUDE_CONFIG_DIR")
 	if config == "" {
 		config = filepath.Join(a.Home, ".claude")
@@ -56,12 +54,8 @@ func (a *App) claudeAgents(ctx context.Context) []Agent {
 		case "busy":
 			state = "working"
 		}
-		kind := "loose"
-		if strings.HasPrefix(pane.Session, prefix) {
-			kind = "dedicated"
-		}
 		agents = append(agents, Agent{
-			Provider: "claude", Pane: pane.ID, PID: record.PID, Kind: kind,
+			Provider: "claude", Pane: pane.ID, PID: record.PID,
 			State: state, Activity: a.transcriptMTime(config, record.SessionID),
 			Location: pane.Location, Path: shortenHome(record.CWD, a.Home),
 		})
@@ -120,7 +114,6 @@ func (a *App) codexAgents(ctx context.Context) []Agent {
 			chosen[process.tty] = process
 		}
 	}
-	prefix := a.option(ctx, "@codex_agent_session_prefix", "codex-")
 	ttys := make([]string, 0, len(chosen))
 	for tty := range chosen {
 		ttys = append(ttys, tty)
@@ -129,12 +122,8 @@ func (a *App) codexAgents(ctx context.Context) []Agent {
 	var agents []Agent
 	for _, tty := range ttys {
 		process, pane := chosen[tty], panes[tty]
-		kind := "loose"
-		if strings.HasPrefix(pane.Session, prefix) {
-			kind = "dedicated"
-		}
 		agents = append(agents, Agent{
-			Provider: "codex", Pane: pane.ID, PID: process.pid, Kind: kind,
+			Provider: "codex", Pane: pane.ID, PID: process.pid,
 			State: "running", Activity: a.codexRolloutMTime(ctx, process.pid),
 			Location: pane.Location, Path: shortenHome(pane.Path, a.Home),
 		})
@@ -174,7 +163,7 @@ func (a *App) codexRolloutMTime(ctx context.Context, pid int) time.Time {
 }
 
 type pane struct {
-	ID, Session, Location, Path string
+	ID, Location, Path string
 }
 
 func (a *App) panes(ctx context.Context) map[string]pane {
@@ -189,7 +178,7 @@ func (a *App) panes(ctx context.Context) map[string]pane {
 			continue
 		}
 		tty := strings.TrimPrefix(fields[0], "/dev/")
-		panes[tty] = pane{ID: fields[1], Session: fields[2], Location: fields[3], Path: fields[4]}
+		panes[tty] = pane{ID: fields[1], Location: fields[3], Path: fields[4]}
 	}
 	return panes
 }

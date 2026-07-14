@@ -41,11 +41,10 @@ activity ages. Claude JSON is decoded directly, so `jq` is no longer required.
 A missing optional command disables only that provider or metadata.
 
 When no running agents match the selected provider, the picker shows a concise
-tmux message instead of opening an empty `fzf` interface. This is also safe from
-dedicated `claude-` and `codex-` sessions: the current client remains attached
-and the popup parent state is left unchanged. `agent-picker list` remains
-machine-readable, producing no output and exiting successfully for an empty
-result.
+tmux message instead of opening an empty `fzf` interface. The current client
+remains attached and the popup parent state is left unchanged. `agent-picker
+list` remains machine-readable, producing no output and exiting successfully
+for an empty result.
 
 The command requires an explicit action and accepts an optional provider:
 
@@ -66,16 +65,9 @@ set -g @agent_popup_height      '90%'
 set -g @agent_fzf_options       ''
 set -g @agent_parent            '' # managed internally for popup return
 set -g @codex_agent_process_name 'codex'
-set -g @codex_agent_session_prefix 'codex-'
 ```
 
-Provider-specific `@claude_agent_command` and
-`@claude_agent_session_prefix` settings remain supported, as do
-`@claude_agent_origin`, `@codex_agent_origin`, and their `@agent_origin`
-fallback. Popup, fzf, and parent-client behavior uses only the generic options
-shown above. Sessions prefixed with either `claude-` or `codex-` retain the
-dedicated popup navigation behavior; agents in other sessions are focused in
-place.
+Selecting an agent focuses its tmux session, window, and pane in place.
 
 The provider adapters use structured Go values internally and only format TSV
 at the fzf boundary, so a future Codex app-server adapter can replace passive

@@ -32,8 +32,6 @@ func runHelper(name string, args []string) {
 			_, _ = os.Stdout.WriteString("77%")
 		case "show-option -gqv @agent_popup_height":
 			_, _ = os.Stdout.WriteString("66%")
-		case "list-clients -F #{client_name} #{session_name}":
-			_, _ = os.Stdout.WriteString("blackbox work\n")
 		default:
 			if len(args) > 0 && args[0] == "list-panes" {
 				_, _ = os.Stdout.WriteString(os.Getenv("AGENT_PICKER_TEST_PANES"))
