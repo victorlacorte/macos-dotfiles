@@ -1,9 +1,11 @@
 # Third-Party Notices
 
-## Claude Agent Picker Scripts
+## Agent Picker Claude Adapter
 
-The local `scripts/claude-agent-*` files are adapted from
-`craftzdog/tmux-claude-session-manager`.
+The Claude-specific portions of the Go agent picker in
+`tools/agent-picker/internal/agentpicker` are adapted from
+`craftzdog/tmux-claude-session-manager`. The passive Codex process adapter is
+a local addition and does not derive from that project.
 
 Source: `https://github.com/craftzdog/tmux-claude-session-manager`
 
