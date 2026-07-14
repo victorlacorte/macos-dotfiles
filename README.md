@@ -40,6 +40,13 @@ the Claude provider; Codex enables the Codex provider; and `lsof` adds Codex
 activity ages. Claude JSON is decoded directly, so `jq` is no longer required.
 A missing optional command disables only that provider or metadata.
 
+When no running agents match the selected provider, the picker shows a concise
+tmux message instead of opening an empty `fzf` interface. This is also safe from
+dedicated `claude-` and `codex-` sessions: the current client remains attached
+and the popup parent state is left unchanged. `agent-picker list` remains
+machine-readable, producing no output and exiting successfully for an empty
+result.
+
 The command requires an explicit action and accepts an optional provider:
 
 ```text

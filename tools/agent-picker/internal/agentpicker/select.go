@@ -25,6 +25,11 @@ func (a *App) Select(ctx context.Context, provider string) {
 		_, _ = a.run(ctx, "tmux", "display-message", "agent-picker: invalid fzf options: "+err.Error())
 		return
 	}
+	snapshot := a.snapshot(ctx, provider)
+	if len(snapshot.agents) == 0 {
+		_, _ = a.run(ctx, "tmux", "display-message", noAgentsMessage(provider))
+		return
+	}
 	header := "Agents: enter jump, ctrl-x terminate"
 	if provider == "claude" {
 		header = "Claude agents: enter jump, ctrl-x terminate"
@@ -39,7 +44,7 @@ func (a *App) Select(ctx context.Context, provider string) {
 	}
 	args = append(args, extra...)
 	selected, _ := a.Runner.Run(ctx, Command{
-		Name: "fzf", Args: args, Input: a.Rows(ctx, provider), Stderr: a.Stderr,
+		Name: "fzf", Args: args, Input: snapshot.rows(), Stderr: a.Stderr,
 		Env: map[string]string{
 			"FZF_DEFAULT_OPTS": "", "AGENT_PICKER": a.Executable,
 			"AGENT_PICKER_PROVIDER": provider,

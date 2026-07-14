@@ -12,6 +12,10 @@ func (a *App) Popup(ctx context.Context, provider, client string) {
 		fmt.Fprintln(a.Stderr, "agent-picker: tmux is required")
 		return
 	}
+	if snapshot := a.snapshot(ctx, provider); len(snapshot.agents) == 0 {
+		_, _ = a.run(ctx, "tmux", "display-message", noAgentsMessage(provider))
+		return
+	}
 	claudePrefix := a.option(ctx, "@claude_agent_session_prefix", "claude-")
 	codexPrefix := a.option(ctx, "@codex_agent_session_prefix", "codex-")
 	width := a.option(ctx, "@agent_popup_width", "90%")

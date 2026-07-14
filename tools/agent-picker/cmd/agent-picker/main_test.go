@@ -61,12 +61,13 @@ func TestPopupBlackBoxWithExplicitCommand(t *testing.T) {
 	tmp := t.TempDir()
 	binary := filepath.Join(tmp, "agent-picker")
 	buildPicker(t, binary, filepath.Join(tmp, "go-cache"))
-	aliasTools(t, tmp, "tmux")
+	aliasTools(t, tmp, "tmux", "ps", "codex")
 	log := filepath.Join(tmp, "tmux.log")
 	command := exec.Command(binary, "popup", "blackbox")
 	command.Env = append(os.Environ(),
 		"PATH="+tmp+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"AGENT_PICKER_TEST_HELPER=1", "AGENT_PICKER_TEST_LOG="+log,
+		"AGENT_PICKER_TEST_PANES=/dev/ttys002\t%2\tcodex-two\tcodex-two:1.1\t/tmp/Codex Path\n",
 	)
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("run picker: %v\n%s", err, output)
