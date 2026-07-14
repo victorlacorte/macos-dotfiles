@@ -47,6 +47,23 @@ func newTestApp(runner *fakeRunner, clock *fakeClock, home string) *App {
 	return &App{Runner: runner, FS: OSFileSystem{}, Clock: clock, Home: home, Executable: "/bin/agent picker"}
 }
 
+func fakeAgentResponse(command Command) (string, bool) {
+	joined := strings.Join(command.Args, " ")
+	switch {
+	case command.Name == "claude" && joined == "agents --json":
+		return `[{"pid":100,"status":"waiting","sessionId":"claude-id","cwd":"/tmp/claude","kind":"interactive"}]`, true
+	case command.Name == "ps" && joined == "-Ao pid=,tty=":
+		return "100 ttys001\n", true
+	case command.Name == "ps" && joined == "-Ao pid=,ppid=,tty=,comm=":
+		return "200 1 ttys002 codex\n", true
+	case command.Name == "tmux" && strings.HasPrefix(joined, "list-panes -a"):
+		return "/dev/ttys001\t%8\twork\twork:1.1\t/tmp/claude\n" +
+			"/dev/ttys002\t%9\tcodex-project\tcodex-project:1.1\t/tmp/codex\n", true
+	default:
+		return "", false
+	}
+}
+
 func TestProvidersAndAggregation(t *testing.T) {
 	home := t.TempDir()
 	claudeHome := filepath.Join(home, "Claude Home")
@@ -225,6 +242,10 @@ func TestCLICommandsAndProviders(t *testing.T) {
 				name := command + "/" + dash + "/" + provider
 				t.Run(name, func(t *testing.T) {
 					runner := &fakeRunner{available: map[string]bool{"tmux": true, "fzf": true, "claude": true, "codex": true}}
+					runner.handle = func(command Command) (string, error) {
+						out, _ := fakeAgentResponse(command)
+						return out, nil
+					}
 					app := newTestApp(runner, &fakeClock{now: time.Now()}, t.TempDir())
 					stdout, stderr := &strings.Builder{}, &strings.Builder{}
 					app.Stdout, app.Stderr = stdout, stderr
@@ -261,7 +282,11 @@ func TestCLICommandsAndProviders(t *testing.T) {
 }
 
 func TestCLIPopupOptionalClient(t *testing.T) {
-	runner := &fakeRunner{available: map[string]bool{"tmux": true}}
+	runner := &fakeRunner{available: map[string]bool{"tmux": true, "codex": true}}
+	runner.handle = func(command Command) (string, error) {
+		out, _ := fakeAgentResponse(command)
+		return out, nil
+	}
 	app := newTestApp(runner, &fakeClock{}, t.TempDir())
 	app.Stdout, app.Stderr = &strings.Builder{}, &strings.Builder{}
 	if code := app.Main(context.Background(), []string{"popup"}); code != 0 {
@@ -353,7 +378,7 @@ func TestSelectionNavigationAndCancellation(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			runner := &fakeRunner{available: map[string]bool{"tmux": true, "fzf": true}}
+			runner := &fakeRunner{available: map[string]bool{"tmux": true, "fzf": true, "codex": true}}
 			runner.handle = func(command Command) (string, error) {
 				joined := strings.Join(command.Args, " ")
 				switch {
@@ -370,6 +395,9 @@ func TestSelectionNavigationAndCancellation(t *testing.T) {
 					return "work", nil
 				case strings.HasPrefix(joined, "display-message -p -t %4"):
 					return "codex-four", nil
+				}
+				if out, ok := fakeAgentResponse(command); ok {
+					return out, nil
 				}
 				return "", nil
 			}
@@ -394,10 +422,12 @@ func TestSelectionNavigationAndCancellation(t *testing.T) {
 
 func TestSelectionReceivesAlignedTSVRows(t *testing.T) {
 	runner := &fakeRunner{available: map[string]bool{"tmux": true, "fzf": true, "codex": true}}
+	collections := 0
 	runner.handle = func(command Command) (string, error) {
 		joined := strings.Join(command.Args, " ")
 		switch {
 		case command.Name == "ps":
+			collections++
 			return "200 1 ttys001 codex\n201 1 ttys002 codex\n", nil
 		case command.Name == "tmux" && strings.HasPrefix(joined, "list-panes"):
 			return "/dev/ttys001\t%5\twork\twork:1.1\t/tmp/x\n" +
@@ -432,6 +462,9 @@ func TestSelectionReceivesAlignedTSVRows(t *testing.T) {
 	app := newTestApp(runner, &fakeClock{now: time.Now()}, t.TempDir())
 	app.Stdout, app.Stderr = &strings.Builder{}, &strings.Builder{}
 	app.Select(context.Background(), "codex")
+	if collections != 1 {
+		t.Fatalf("select collected agents %d times, want 1", collections)
+	}
 	calls := commandLines(runner.commands)
 	for _, want := range []string{"tmux switch-client -t work", "tmux select-window -t %5", "tmux select-pane -t %5"} {
 		if !strings.Contains(calls, want) {
@@ -441,7 +474,7 @@ func TestSelectionReceivesAlignedTSVRows(t *testing.T) {
 }
 
 func TestSelectionFZFOptions(t *testing.T) {
-	runner := &fakeRunner{available: map[string]bool{"tmux": true, "fzf": true}}
+	runner := &fakeRunner{available: map[string]bool{"tmux": true, "fzf": true, "codex": true}}
 	runner.handle = func(command Command) (string, error) {
 		joined := strings.Join(command.Args, " ")
 		if command.Name == "tmux" && joined == "show-option -gqv @agent_fzf_options" {
@@ -455,6 +488,9 @@ func TestSelectionFZFOptions(t *testing.T) {
 			if _, ok := command.Env["CLAUDE_AGENT_PICKER"]; ok {
 				t.Fatal("removed CLAUDE_AGENT_PICKER environment variable was set")
 			}
+		}
+		if out, ok := fakeAgentResponse(command); ok {
+			return out, nil
 		}
 		return "", nil
 	}
@@ -475,7 +511,7 @@ func containsArgument(arguments []string, name, following string) bool {
 func TestPopupOptionsAndDedicatedDetach(t *testing.T) {
 	clock := &fakeClock{now: time.Now()}
 	listCount := 0
-	runner := &fakeRunner{available: map[string]bool{"tmux": true}}
+	runner := &fakeRunner{available: map[string]bool{"tmux": true, "codex": true}}
 	runner.handle = func(command Command) (string, error) {
 		joined := strings.Join(command.Args, " ")
 		switch {
@@ -493,6 +529,9 @@ func TestPopupOptionsAndDedicatedDetach(t *testing.T) {
 			return "work\n", nil
 		case joined == "show-options -gqv @agent_parent":
 			return "host-client", nil
+		}
+		if out, ok := fakeAgentResponse(command); ok {
+			return out, nil
 		}
 		return "", nil
 	}
@@ -514,14 +553,86 @@ func TestPopupOptionsAndDedicatedDetach(t *testing.T) {
 }
 
 func TestPopupNoHost(t *testing.T) {
-	runner := &fakeRunner{available: map[string]bool{"tmux": true}}
-	runner.handle = func(command Command) (string, error) { return "", nil }
+	runner := &fakeRunner{available: map[string]bool{"tmux": true, "codex": true}}
+	runner.handle = func(command Command) (string, error) {
+		out, _ := fakeAgentResponse(command)
+		return out, nil
+	}
 	app := newTestApp(runner, &fakeClock{}, t.TempDir())
 	app.Stderr = &strings.Builder{}
 	app.Popup(context.Background(), "all", "")
 	calls := commandLines(runner.commands)
 	if strings.Contains(calls, "display-popup -c") || !strings.Contains(calls, "tmux display-popup -w 90% -h 90%") {
 		t.Fatalf("no-host popup arguments are wrong:\n%s", calls)
+	}
+}
+
+func TestEmptyPopupKeepsDedicatedSessionAttached(t *testing.T) {
+	runner := &fakeRunner{available: map[string]bool{"tmux": true}}
+	runner.handle = func(command Command) (string, error) {
+		if strings.Join(command.Args, " ") == "list-clients -F #{client_name} #{session_name}" {
+			return "client-one claude-project\n", nil
+		}
+		return "", nil
+	}
+	app := newTestApp(runner, &fakeClock{}, t.TempDir())
+	app.Stderr = &strings.Builder{}
+	app.Popup(context.Background(), "claude", "client-one")
+	calls := commandLines(runner.commands)
+	if !strings.Contains(calls, "tmux display-message agent-picker: no running Claude agents found") {
+		t.Fatalf("missing empty-state message:\n%s", calls)
+	}
+	for _, unwanted := range []string{"list-clients", "detach-client", "set-option -g @agent_parent", "display-popup"} {
+		if strings.Contains(calls, unwanted) {
+			t.Fatalf("empty popup unexpectedly called %q:\n%s", unwanted, calls)
+		}
+	}
+}
+
+func TestEmptySelectMessagesAndSkipsFZF(t *testing.T) {
+	tests := []struct {
+		provider string
+		message  string
+	}{
+		{provider: "all", message: "agent-picker: no running agents found"},
+		{provider: "claude", message: "agent-picker: no running Claude agents found"},
+		{provider: "codex", message: "agent-picker: no running Codex agents found"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.provider, func(t *testing.T) {
+			runner := &fakeRunner{available: map[string]bool{
+				"tmux": true, "fzf": true, "claude": true, "codex": true,
+			}}
+			runner.handle = func(command Command) (string, error) {
+				if command.Name == "claude" {
+					return "[]", nil
+				}
+				return "", nil
+			}
+			app := newTestApp(runner, &fakeClock{}, t.TempDir())
+			app.Stderr = &strings.Builder{}
+			app.Select(context.Background(), tt.provider)
+			calls := commandLines(runner.commands)
+			if !strings.Contains(calls, "tmux display-message "+tt.message) {
+				t.Fatalf("missing empty-state message:\n%s", calls)
+			}
+			if strings.Contains(calls, "fzf ") {
+				t.Fatalf("empty select invoked fzf:\n%s", calls)
+			}
+		})
+	}
+}
+
+func TestEmptyListIsSilentAndSuccessful(t *testing.T) {
+	runner := &fakeRunner{available: map[string]bool{}}
+	app := newTestApp(runner, &fakeClock{}, t.TempDir())
+	stdout, stderr := &strings.Builder{}, &strings.Builder{}
+	app.Stdout, app.Stderr = stdout, stderr
+	if code := app.Main(context.Background(), []string{"list", "-provider", "all"}); code != 0 {
+		t.Fatalf("exit code %d; stderr:\n%s", code, stderr)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("empty list wrote output: %q", stdout.String())
 	}
 }
 
