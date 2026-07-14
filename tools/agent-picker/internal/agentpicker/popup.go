@@ -10,23 +10,14 @@ func (a *App) Popup(ctx context.Context, provider, client string) {
 		fmt.Fprintln(a.Stderr, "agent-picker: tmux is required")
 		return
 	}
-	if snapshot := a.snapshot(ctx, provider); len(snapshot.agents) == 0 {
-		_, _ = a.run(ctx, "tmux", "display-message", noAgentsMessage(provider))
-		return
-	}
 	width := a.option(ctx, "@agent_popup_width", "90%")
 	height := a.option(ctx, "@agent_popup_height", "90%")
-	parentOption := "@agent_parent"
 
-	host := client
-	if host != "" {
-		_, _ = a.run(ctx, "tmux", "set-option", "-g", parentOption, host)
-	}
-
-	command := shellQuote(a.Executable) + " select -provider " + shellQuote(provider)
+	command := "AGENT_PICKER_CLIENT=" + shellQuote(client) + " " +
+		shellQuote(a.Executable) + " select -provider " + shellQuote(provider)
 	args := []string{"display-popup"}
-	if host != "" {
-		args = append(args, "-c", host)
+	if client != "" {
+		args = append(args, "-c", client)
 	}
 	args = append(args, "-w", width, "-h", height, "-E", command)
 	_, _ = a.run(ctx, "tmux", args...)

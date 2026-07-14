@@ -3,16 +3,22 @@ package agentpicker
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 )
 
+type discoveryResult struct {
+	empty bool
+}
+
 func (a *App) Select(ctx context.Context, provider string) {
+	client := getenv("AGENT_PICKER_CLIENT")
 	for _, tool := range []string{"tmux", "fzf"} {
 		if _, err := a.Runner.LookPath(tool); err == nil {
 			continue
 		}
 		if _, err := a.Runner.LookPath("tmux"); err == nil {
-			_, _ = a.run(ctx, "tmux", "display-message", "agent-picker: "+tool+" is required")
+			a.displayMessage(ctx, client, "agent-picker: "+tool+" is required")
 		} else {
 			fmt.Fprintf(a.Stderr, "agent-picker: %s is required\n", tool)
 		}
@@ -22,12 +28,7 @@ func (a *App) Select(ctx context.Context, provider string) {
 	options := a.option(ctx, "@agent_fzf_options", "")
 	extra, err := SplitShellWords(options)
 	if err != nil {
-		_, _ = a.run(ctx, "tmux", "display-message", "agent-picker: invalid fzf options: "+err.Error())
-		return
-	}
-	snapshot := a.snapshot(ctx, provider)
-	if len(snapshot.agents) == 0 {
-		_, _ = a.run(ctx, "tmux", "display-message", noAgentsMessage(provider))
+		a.displayMessage(ctx, client, "agent-picker: invalid fzf options: "+err.Error())
 		return
 	}
 	header := "Agents: enter jump, ctrl-x terminate"
@@ -43,13 +44,39 @@ func (a *App) Select(ctx context.Context, provider string) {
 		`--bind=ctrl-x:execute-silent(kill {3})+reload(sleep 0.3; "$AGENT_PICKER" list -provider "$AGENT_PICKER_PROVIDER")`,
 	}
 	args = append(args, extra...)
-	selected, _ := a.Runner.Run(ctx, Command{
-		Name: "fzf", Args: args, Input: snapshot.rows(), Stderr: a.Stderr,
+
+	discoveryCtx, cancelDiscovery := context.WithCancel(ctx)
+	reader, writer := io.Pipe()
+	result := make(chan discoveryResult, 1)
+	go func() {
+		snapshot := a.snapshot(discoveryCtx, provider)
+		empty := len(snapshot.agents) == 0 && discoveryCtx.Err() == nil
+		if empty {
+			_ = writer.Close()
+			result <- discoveryResult{empty: true}
+			cancelDiscovery()
+			return
+		}
+		_, writeErr := io.WriteString(writer, snapshot.rows())
+		_ = writer.CloseWithError(writeErr)
+		result <- discoveryResult{}
+	}()
+
+	selected, _ := a.Runner.Run(discoveryCtx, Command{
+		Name: "fzf", Args: args, Input: reader, Stderr: a.Stderr,
 		Env: map[string]string{
 			"FZF_DEFAULT_OPTS": "", "AGENT_PICKER": a.Executable,
 			"AGENT_PICKER_PROVIDER": provider,
 		},
 	})
+	cancelDiscovery()
+	_ = reader.CloseWithError(context.Canceled)
+	discovery := <-result
+	if discovery.empty {
+		a.displayMessage(ctx, client, noAgentsMessage(provider))
+		return
+	}
+
 	selected = trimLine(selected)
 	if selected == "" {
 		return
@@ -59,13 +86,21 @@ func (a *App) Select(ctx context.Context, provider string) {
 		return
 	}
 	pane := fields[1]
-	parent := a.tmux(ctx, "show-options", "-gqv", "@agent_parent")
 	session := a.tmux(ctx, "display-message", "-p", "-t", pane, "#{session_name}")
-	if parent != "" {
-		_, _ = a.run(ctx, "tmux", "switch-client", "-c", parent, "-t", session)
+	if client != "" {
+		_, _ = a.run(ctx, "tmux", "switch-client", "-c", client, "-t", session)
 	} else {
 		_, _ = a.run(ctx, "tmux", "switch-client", "-t", session)
 	}
 	_, _ = a.run(ctx, "tmux", "select-window", "-t", pane)
 	_, _ = a.run(ctx, "tmux", "select-pane", "-t", pane)
+}
+
+func (a *App) displayMessage(ctx context.Context, client, message string) {
+	args := []string{"display-message"}
+	if client != "" {
+		args = append(args, "-c", client)
+	}
+	args = append(args, message)
+	_, _ = a.run(ctx, "tmux", args...)
 }

@@ -7,19 +7,43 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
+type process struct {
+	pid, ppid int
+	tty       string
+	command   string
+}
+
+type pane struct {
+	ID, Location, Path string
+}
+
+type discoveryInventory struct {
+	wg        sync.WaitGroup
+	processes map[int]process
+	panes     map[string]pane
+}
+
+func (a *App) startInventory(ctx context.Context) *discoveryInventory {
+	inventory := &discoveryInventory{}
+	inventory.wg.Add(2)
+	go func() {
+		defer inventory.wg.Done()
+		inventory.processes = a.processInventory(ctx)
+	}()
+	go func() {
+		defer inventory.wg.Done()
+		inventory.panes = a.panes(ctx)
+	}()
+	return inventory
+}
+
 // The Claude adapter retains behavior adapted from
 // craftzdog/tmux-claude-session-manager. See THIRD_PARTY_NOTICES.md.
-func (a *App) claudeAgents(ctx context.Context) []Agent {
-	if _, err := a.Runner.LookPath("claude"); err != nil {
-		return nil
-	}
-	out, err := a.run(ctx, "claude", "agents", "--json")
-	if err != nil {
-		return nil
-	}
+func (a *App) collectClaudeAgents(ctx context.Context, inventory *discoveryInventory) []Agent {
 	var records []struct {
 		PID       int    `json:"pid"`
 		Status    string `json:"status"`
@@ -27,12 +51,18 @@ func (a *App) claudeAgents(ctx context.Context) []Agent {
 		CWD       string `json:"cwd"`
 		Kind      string `json:"kind"`
 	}
-	if err := json.Unmarshal([]byte(out), &records); err != nil {
-		return nil
+	available := false
+	if _, err := a.Runner.LookPath("claude"); err == nil {
+		out, runErr := a.run(ctx, "claude", "agents", "--json")
+		if runErr == nil && json.Unmarshal([]byte(out), &records) == nil {
+			available = true
+		}
 	}
 
-	ttys := a.processTTYs(ctx)
-	panes := a.panes(ctx)
+	inventory.wg.Wait()
+	if !available {
+		return nil
+	}
 	config := getenv("CLAUDE_CONFIG_DIR")
 	if config == "" {
 		config = filepath.Join(a.Home, ".claude")
@@ -43,7 +73,11 @@ func (a *App) claudeAgents(ctx context.Context) []Agent {
 		if record.Kind != "interactive" {
 			continue
 		}
-		pane, ok := panes[ttys[record.PID]]
+		process, ok := inventory.processes[record.PID]
+		if !ok {
+			continue
+		}
+		pane, ok := inventory.panes[process.tty]
 		if !ok {
 			continue
 		}
@@ -74,36 +108,24 @@ func (a *App) transcriptMTime(config, sessionID string) time.Time {
 	return time.Time{}
 }
 
-func (a *App) codexAgents(ctx context.Context) []Agent {
+func (a *App) collectCodexAgents(ctx context.Context, inventory *discoveryInventory) []Agent {
 	processName := a.option(ctx, "@codex_agent_process_name", "codex")
-	if _, err := a.Runner.LookPath(processName); err != nil {
+	_, lookupErr := a.Runner.LookPath(processName)
+	inventory.wg.Wait()
+	if lookupErr != nil {
 		return nil
 	}
-	out, err := a.run(ctx, "ps", "-Ao", "pid=,ppid=,tty=,comm=")
-	if err != nil {
-		return nil
-	}
-	type process struct {
-		pid, ppid int
-		tty       string
-	}
-	processes := make(map[int]process)
+
 	base := filepath.Base(processName)
-	for _, line := range strings.Split(out, "\n") {
-		fields := strings.Fields(line)
-		if len(fields) < 4 || filepath.Base(strings.Join(fields[3:], " ")) != base {
-			continue
-		}
-		pid, err1 := strconv.Atoi(fields[0])
-		ppid, err2 := strconv.Atoi(fields[1])
-		if err1 == nil && err2 == nil {
-			processes[pid] = process{pid: pid, ppid: ppid, tty: fields[2]}
+	processes := make(map[int]process)
+	for pid, process := range inventory.processes {
+		if filepath.Base(process.command) == base {
+			processes[pid] = process
 		}
 	}
-	panes := a.panes(ctx)
 	chosen := make(map[string]process)
 	for _, process := range processes {
-		if _, ok := panes[process.tty]; !ok {
+		if _, ok := inventory.panes[process.tty]; !ok {
 			continue
 		}
 		if parent, ok := processes[process.ppid]; ok && parent.tty == process.tty {
@@ -119,34 +141,52 @@ func (a *App) codexAgents(ctx context.Context) []Agent {
 		ttys = append(ttys, tty)
 	}
 	sort.Strings(ttys)
-	var agents []Agent
+	pids := make([]int, 0, len(ttys))
 	for _, tty := range ttys {
-		process, pane := chosen[tty], panes[tty]
+		pids = append(pids, chosen[tty].pid)
+	}
+	activity := a.codexRolloutMTimes(ctx, pids)
+
+	agents := make([]Agent, 0, len(ttys))
+	for _, tty := range ttys {
+		process, pane := chosen[tty], inventory.panes[tty]
 		agents = append(agents, Agent{
 			Provider: "codex", Pane: pane.ID, PID: process.pid,
-			State: "running", Activity: a.codexRolloutMTime(ctx, process.pid),
+			State: "running", Activity: activity[process.pid],
 			Location: pane.Location, Path: shortenHome(pane.Path, a.Home),
 		})
 	}
 	return agents
 }
 
-func (a *App) codexRolloutMTime(ctx context.Context, pid int) time.Time {
+func (a *App) codexRolloutMTimes(ctx context.Context, pids []int) map[int]time.Time {
+	activity := make(map[int]time.Time)
+	if len(pids) == 0 {
+		return activity
+	}
 	if _, err := a.Runner.LookPath("lsof"); err != nil {
-		return time.Time{}
+		return activity
 	}
-	out, err := a.run(ctx, "lsof", "-a", "-p", strconv.Itoa(pid), "-Fn")
-	if err != nil {
-		return time.Time{}
+	sortedPIDs := append([]int(nil), pids...)
+	sort.Ints(sortedPIDs)
+	values := make([]string, len(sortedPIDs))
+	for i, pid := range sortedPIDs {
+		values[i] = strconv.Itoa(pid)
 	}
+	out, _ := a.run(ctx, "lsof", "-a", "-p", strings.Join(values, ","), "-Fn")
+
 	base := getenv("CODEX_HOME")
 	if base == "" {
 		base = filepath.Join(a.Home, ".codex")
 	}
 	sessions := filepath.Clean(filepath.Join(base, "sessions")) + string(filepath.Separator)
-	var newest time.Time
+	currentPID := 0
 	for _, line := range strings.Split(out, "\n") {
-		if !strings.HasPrefix(line, "n"+sessions) {
+		if strings.HasPrefix(line, "p") {
+			currentPID, _ = strconv.Atoi(strings.TrimPrefix(line, "p"))
+			continue
+		}
+		if currentPID == 0 || !strings.HasPrefix(line, "n"+sessions) {
 			continue
 		}
 		path := strings.TrimPrefix(line, "n")
@@ -155,15 +195,11 @@ func (a *App) codexRolloutMTime(ctx context.Context, pid int) time.Time {
 			continue
 		}
 		info, err := a.FS.Stat(path)
-		if err == nil && info.ModTime().After(newest) {
-			newest = info.ModTime()
+		if err == nil && info.ModTime().After(activity[currentPID]) {
+			activity[currentPID] = info.ModTime()
 		}
 	}
-	return newest
-}
-
-type pane struct {
-	ID, Location, Path string
+	return activity
 }
 
 func (a *App) panes(ctx context.Context) map[string]pane {
@@ -183,20 +219,22 @@ func (a *App) panes(ctx context.Context) map[string]pane {
 	return panes
 }
 
-func (a *App) processTTYs(ctx context.Context) map[int]string {
-	out, err := a.run(ctx, "ps", "-Ao", "pid=,tty=")
+func (a *App) processInventory(ctx context.Context) map[int]process {
+	out, err := a.run(ctx, "ps", "-Ao", "pid=,ppid=,tty=,comm=")
 	if err != nil {
 		return nil
 	}
-	ttys := make(map[int]string)
+	processes := make(map[int]process)
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)
-		if len(fields) < 2 {
+		if len(fields) < 4 {
 			continue
 		}
-		if pid, err := strconv.Atoi(fields[0]); err == nil {
-			ttys[pid] = fields[1]
+		pid, err1 := strconv.Atoi(fields[0])
+		ppid, err2 := strconv.Atoi(fields[1])
+		if err1 == nil && err2 == nil {
+			processes[pid] = process{pid: pid, ppid: ppid, tty: fields[2], command: strings.Join(fields[3:], " ")}
 		}
 	}
-	return ttys
+	return processes
 }

@@ -39,9 +39,7 @@ func runHelper(name string, args []string) {
 		}
 	case "ps":
 		if strings.Contains(joined, "ppid=") {
-			_, _ = os.Stdout.WriteString("200 1 ttys002 codex\n")
-		} else {
-			_, _ = os.Stdout.WriteString("100 ttys001\n")
+			_, _ = os.Stdout.WriteString("100 1 ttys001 claude\n200 1 ttys002 codex\n")
 		}
 	case "claude":
 		_, _ = os.Stdout.WriteString(os.Getenv("AGENT_PICKER_TEST_CLAUDE_JSON"))
@@ -76,8 +74,8 @@ func TestPopupBlackBoxWithExplicitCommand(t *testing.T) {
 	}
 	calls := string(contents)
 	for _, want := range []string{
-		"set-option -g @agent_parent blackbox",
 		"display-popup -c blackbox -w 77% -h 66% -E",
+		"AGENT_PICKER_CLIENT='blackbox'",
 		"select -provider 'all'",
 	} {
 		if !strings.Contains(calls, want) {
