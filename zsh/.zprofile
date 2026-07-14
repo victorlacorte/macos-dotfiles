@@ -20,7 +20,7 @@ gpg-connect-agent "keyattr $(cat "$SSH_KEYGRIP_FILE") Use-for-ssh: true" /bye >/
 # Path: https://zsh.sourceforge.io/Guide/zshguide02.html, section 2.5.11
 # Zsh-specific: keep only unique entries on path
 typeset -U path
-path=(/usr/local/go/bin $HOME/coding/macos-dotfiles/scripts $path)
+path=(/usr/local/go/bin $HOME/.local/bin $HOME/coding/macos-dotfiles/scripts $path)
 
 # Set a proper locale
 export LANG="en_US.UTF-8"

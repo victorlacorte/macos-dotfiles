@@ -25,6 +25,7 @@ path_append -d $HOME/.cargo/bin
 path_append -d $HOME/.poetry/bin
 path_append -d $HOME/bin
 path_append -d $HOME/go/bin
+path_append -d $HOME/.local/bin
 # path_append -d $HOME/coding/victorlacorte/scripts/bin
 path_append -d $HOME/coding/victorlacorte/macos-dotfiles/scripts
 # path_append -d $VOLTA_HOME/bin

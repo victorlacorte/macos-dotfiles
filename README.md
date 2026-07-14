@@ -6,28 +6,78 @@
 stow -n -v --target=$HOME ...
 brew install pinentry-mac
 brew install tree-sitter-cli
-brew install fzf jq
+brew install fzf
 ```
+
+The tmux agent picker source lives in `tools/agent-picker` and requires Go 1.22
+or newer. Build and install it locally from the repository root with:
+
+```sh
+make install-agent-picker
+```
+
+This installs `agent-picker` in `$HOME/.local/bin`. Re-run the command after
+updating these dotfiles to rebuild the binary. The binary is a local build
+artifact and is not committed.
 
 ## Tmux
 
 `prefix Space` opens the project sessionizer.
 
-`prefix u` opens a Claude agent picker. It lists running Claude Code agents,
-shows a live tmux pane preview, jumps to the selected agent with `enter`, and
-kills the selected Claude process with `ctrl-x`.
+`prefix u` opens one picker for running Claude Code and Codex TUI panes. It
+shows each provider, status, activity age, tmux location, working path, and a
+live pane preview. Press `enter` to jump to an agent or `ctrl-x` to terminate
+its process and reload the list.
 
-The Claude picker scripts are adapted from `craftzdog/tmux-claude-session-manager`;
-see `THIRD_PARTY_NOTICES.md` for the upstream MIT license notice.
+Claude reports detailed `waiting`, `idle`, and `working` states through
+`claude agents --json`. Codex is detected passively by joining exact `codex`
+processes to tmux panes through their TTYs, so its conservative status is always
+`running`. Its age comes from the newest open
+`$CODEX_HOME/sessions/**/rollout-*.jsonl` when `lsof` is available.
 
-The picker requires tmux 3.2 or newer, `fzf`, `jq`, and a Claude Code version
-that supports `claude agents --json`.
+Only tmux 3.2 or newer and `fzf` are required at runtime. Claude Code enables
+the Claude provider; Codex enables the Codex provider; and `lsof` adds Codex
+activity ages. Claude JSON is decoded directly, so `jq` is no longer required.
+A missing optional command disables only that provider or metadata.
 
-Codex follow-up: Codex does not have a direct `claude agents --json` equivalent
-for live local agents. A future Codex picker should use Codex app-server or SDK
-metadata, especially `thread/list`, `thread/loaded/list`, and thread status
-events. A simpler interim version could list dedicated `codex-*` tmux sessions
-with previews, but it would not have reliable working/waiting/idle status.
+The command requires an explicit action and accepts an optional provider:
+
+```text
+agent-picker popup [-provider all|claude|codex] [TMUX_CLIENT]
+agent-picker select [-provider all|claude|codex]
+agent-picker list [-provider all|claude|codex]
+```
+
+Both `-provider` and `--provider` are accepted.
+For `popup`, place the provider flag before `TMUX_CLIENT`.
+
+The generic tmux options and defaults are:
+
+```tmux
+set -g @agent_popup_width       '90%'
+set -g @agent_popup_height      '90%'
+set -g @agent_fzf_options       ''
+set -g @agent_parent            '' # managed internally for popup return
+set -g @codex_agent_process_name 'codex'
+set -g @codex_agent_session_prefix 'codex-'
+```
+
+Provider-specific `@claude_agent_command` and
+`@claude_agent_session_prefix` settings remain supported, as do
+`@claude_agent_origin`, `@codex_agent_origin`, and their `@agent_origin`
+fallback. Popup, fzf, and parent-client behavior uses only the generic options
+shown above. Sessions prefixed with either `claude-` or `codex-` retain the
+dedicated popup navigation behavior; agents in other sessions are focused in
+place.
+
+The provider adapters use structured Go values internally and only format TSV
+at the fzf boundary, so a future Codex app-server adapter can replace passive
+process discovery and add accurate working/waiting/idle states without changing
+the picker UI.
+
+The Claude metadata adapter is adapted from
+`craftzdog/tmux-claude-session-manager`; see `THIRD_PARTY_NOTICES.md` for the
+upstream MIT license notice.
 
 ## Git
 
