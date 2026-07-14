@@ -36,12 +36,10 @@ func (r *fakeRunner) Run(_ context.Context, command Command) (string, error) {
 }
 
 type fakeClock struct {
-	now    time.Time
-	sleeps int
+	now time.Time
 }
 
-func (c *fakeClock) Now() time.Time      { return c.now }
-func (c *fakeClock) Sleep(time.Duration) { c.sleeps++ }
+func (c *fakeClock) Now() time.Time { return c.now }
 
 func newTestApp(runner *fakeRunner, clock *fakeClock, home string) *App {
 	return &App{Runner: runner, FS: OSFileSystem{}, Clock: clock, Home: home, Executable: "/bin/agent picker"}
@@ -126,9 +124,9 @@ func TestProvidersAndAggregation(t *testing.T) {
 	if agents[0].Provider != "claude" || agents[0].State != "waiting" || agents[0].Activity.Unix() != waitTime.Unix() {
 		t.Fatalf("waiting Claude agent not ranked first: %#v", agents[0])
 	}
-	assertAgent(t, agents, Agent{Provider: "claude", Pane: "%2", PID: 101, Kind: "dedicated", State: "working", Location: "claude-two:1.1", Path: "~"})
-	assertAgent(t, agents, Agent{Provider: "codex", Pane: "%3", PID: 200, Kind: "dedicated", State: "running", Location: "codex-three:1.1", Path: "~/Project With Spaces", Activity: newTime})
-	assertAgent(t, agents, Agent{Provider: "codex", Pane: "%4", PID: 202, Kind: "loose", State: "running", Location: "work:2.1", Path: "/tmp/loose path"})
+	assertAgent(t, agents, Agent{Provider: "claude", Pane: "%2", PID: 101, State: "working", Location: "claude-two:1.1", Path: "~"})
+	assertAgent(t, agents, Agent{Provider: "codex", Pane: "%3", PID: 200, State: "running", Location: "codex-three:1.1", Path: "~/Project With Spaces", Activity: newTime})
+	assertAgent(t, agents, Agent{Provider: "codex", Pane: "%4", PID: 202, State: "running", Location: "work:2.1", Path: "/tmp/loose path"})
 	rows := app.Rows(context.Background(), "all")
 	if !strings.Contains(rows, "\tclaude\twaiting\t   1m\t") || !strings.Contains(rows, "\tcodex\trunning\t   2m\t") {
 		t.Fatalf("unexpected formatted rows:\n%s", rows)
@@ -177,6 +175,33 @@ func TestProviderDegradation(t *testing.T) {
 	}
 }
 
+func TestClaudeDiscoveryUsesPathResolvedClaude(t *testing.T) {
+	runner := &fakeRunner{available: map[string]bool{"claude": true}}
+	runner.handle = func(command Command) (string, error) {
+		if command.Name == "claude" && strings.Join(command.Args, " ") == "agents --json" {
+			return "[]", nil
+		}
+		return "", nil
+	}
+	app := newTestApp(runner, &fakeClock{now: time.Now()}, t.TempDir())
+
+	if agents := app.claudeAgents(context.Background()); len(agents) != 0 {
+		t.Fatalf("unexpected Claude agents: %#v", agents)
+	}
+	if !reflect.DeepEqual(runner.lookups, []string{"claude"}) {
+		t.Fatalf("Claude executable lookups: got %#v, want exactly claude", runner.lookups)
+	}
+	if len(runner.commands) == 0 || runner.commands[0].Name != "claude" ||
+		!reflect.DeepEqual(runner.commands[0].Args, []string{"agents", "--json"}) {
+		t.Fatalf("Claude discovery command: got %#v, want claude agents --json", runner.commands)
+	}
+	for _, command := range runner.commands {
+		if command.Name == "tmux" && len(command.Args) > 0 && command.Args[0] == "show-option" {
+			t.Fatalf("Claude discovery queried a tmux option:\n%s", commandLines(runner.commands))
+		}
+	}
+}
+
 func TestSplitShellWords(t *testing.T) {
 	got, err := SplitShellWords(`--border "rounded border" --prompt=Agent\ Picker\>\ `)
 	if err != nil {
@@ -196,26 +221,26 @@ func TestSplitShellWords(t *testing.T) {
 func TestExactRowFormattingAndSorting(t *testing.T) {
 	now := time.Unix(1_000, 0)
 	agents := []Agent{
-		{Provider: "claude", Pane: "%3", PID: 3, Kind: "loose", State: "working", Location: "work:2.1", Path: "/tmp/three", Activity: time.Unix(820, 0)},
-		{Provider: "codex", Pane: "%2", PID: 2, Kind: "dedicated", State: "running", Location: "codex-two:1.1", Path: "/tmp/two"},
-		{Provider: "claude", Pane: "%1", PID: 1, Kind: "loose", State: "waiting", Location: "work:1.1", Path: "/tmp/one", Activity: time.Unix(940, 0)},
+		{Provider: "claude", Pane: "%3", PID: 3, State: "working", Location: "work:2.1", Path: "/tmp/three", Activity: time.Unix(820, 0)},
+		{Provider: "codex", Pane: "%2", PID: 2, State: "running", Location: "codex-two:1.1", Path: "/tmp/two"},
+		{Provider: "claude", Pane: "%1", PID: 1, State: "waiting", Location: "work:1.1", Path: "/tmp/one", Activity: time.Unix(940, 0)},
 	}
 	SortAgents(agents, now)
 	rows := FormatRows(agents, now)
 	want := []string{
-		"0\t%1\t1\tloose\tclaude\twaiting\t   1m\twork:1.1     \t/tmp/one  \t1",
-		"2\t%2\t2\tdedicated\tcodex\trunning\t    -\tcodex-two:1.1\t/tmp/two  \t0",
-		"3\t%3\t3\tloose\tclaude\tworking\t   3m\twork:2.1     \t/tmp/three\t3",
+		"0\t%1\t1\tclaude\twaiting\t   1m\twork:1.1     \t/tmp/one  \t1",
+		"2\t%2\t2\tcodex\trunning\t    -\tcodex-two:1.1\t/tmp/two  \t0",
+		"3\t%3\t3\tclaude\tworking\t   3m\twork:2.1     \t/tmp/three\t3",
 	}
 	if !reflect.DeepEqual(rows, want) {
 		t.Fatalf("rows mismatch\n got: %#v\nwant: %#v", rows, want)
 	}
 	for _, row := range rows {
 		fields := strings.Split(row, "\t")
-		if len(fields) != 10 {
-			t.Fatalf("row has %d TSV fields, want 10: %q", len(fields), row)
+		if len(fields) != 9 {
+			t.Fatalf("row has %d TSV fields, want 9: %q", len(fields), row)
 		}
-		starts := terminalFieldStarts(fields[7:])
+		starts := terminalFieldStarts(fields[6:])
 		if starts[1] != 16 || starts[2] != 32 {
 			t.Fatalf("unaligned presentation columns in %q: path=%d age=%d", row, starts[1], starts[2])
 		}
@@ -365,16 +390,16 @@ func TestCLIMalformedInput(t *testing.T) {
 
 func TestSelectionNavigationAndCancellation(t *testing.T) {
 	tests := []struct {
-		name     string
-		selected string
-		parent   string
-		origin   string
-		want     []string
-		notWant  string
+		name        string
+		selected    string
+		parent      string
+		want        []string
+		notWant     string
+		sessionName string
 	}{
 		{name: "cancel", notWant: "switch-client"},
-		{name: "loose", selected: "2\t%5\t202\tloose\tcodex\trunning\t    -\twork:3.1\t/tmp\t0\n", want: []string{"switch-client -t work", "select-window -t %5", "select-pane -t %5"}},
-		{name: "dedicated", selected: "2\t%4\t200\tdedicated\tcodex\trunning\t    -\tcodex-four:1.1\t/tmp\t0\n", parent: "outer-client", origin: "origin-window", want: []string{"switch-client -c outer-client -t origin-window", "attach-session -t codex-four"}},
+		{name: "without parent", selected: "2\t%5\t202\tcodex\trunning\t    -\twork:3.1\t/tmp\t0\n", sessionName: "work", want: []string{"switch-client -t work", "select-window -t %5", "select-pane -t %5"}},
+		{name: "prefixed session", selected: "2\t%4\t200\tcodex\trunning\t    -\tcodex-four:1.1\t/tmp\t0\n", parent: "outer-client", sessionName: "codex-four", want: []string{"switch-client -c outer-client -t codex-four", "select-window -t %4", "select-pane -t %4"}, notWant: "attach-session"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -389,12 +414,10 @@ func TestSelectionNavigationAndCancellation(t *testing.T) {
 					return tt.selected, nil
 				case strings.Contains(joined, "@agent_parent"):
 					return tt.parent, nil
-				case strings.Contains(joined, "@codex_agent_origin"):
-					return tt.origin, nil
 				case strings.HasPrefix(joined, "display-message -p -t %5"):
-					return "work", nil
+					return tt.sessionName, nil
 				case strings.HasPrefix(joined, "display-message -p -t %4"):
-					return "codex-four", nil
+					return tt.sessionName, nil
 				}
 				if out, ok := fakeAgentResponse(command); ok {
 					return out, nil
@@ -412,9 +435,6 @@ func TestSelectionNavigationAndCancellation(t *testing.T) {
 			}
 			if tt.notWant != "" && strings.Contains(calls, tt.notWant) {
 				t.Fatalf("unexpected %q in calls:\n%s", tt.notWant, calls)
-			}
-			if tt.name == "dedicated" && !runner.commands[len(runner.commands)-1].Interactive {
-				t.Fatal("dedicated session attach must inherit the popup terminal")
 			}
 		})
 	}
@@ -442,14 +462,14 @@ func TestSelectionReceivesAlignedTSVRows(t *testing.T) {
 			}
 			for i, line := range lines {
 				fields := strings.Split(line, "\t")
-				if len(fields) != 10 {
+				if len(fields) != 9 {
 					t.Fatalf("fzf row %d has %d TSV fields: %q", i, len(fields), line)
 				}
 				wantPane, wantPID := []string{"%5", "%6"}[i], []string{"200", "201"}[i]
-				if fields[1] != wantPane || fields[2] != wantPID || fields[9] != "0" {
+				if fields[1] != wantPane || fields[2] != wantPID || fields[8] != "0" {
 					t.Fatalf("navigation/kill/age fields changed in row %d: %#v", i, fields)
 				}
-				if len(fields[7]) != len("codex-long:1.1") || len(fields[8]) != len("/tmp/a much longer path") {
+				if len(fields[6]) != len("codex-long:1.1") || len(fields[7]) != len("/tmp/a much longer path") {
 					t.Fatalf("presentation fields are not padded to common widths: %#v", fields)
 				}
 			}
@@ -508,9 +528,7 @@ func containsArgument(arguments []string, name, following string) bool {
 	return false
 }
 
-func TestPopupOptionsAndDedicatedDetach(t *testing.T) {
-	clock := &fakeClock{now: time.Now()}
-	listCount := 0
+func TestPopupOptionsAndPrefixedSessionName(t *testing.T) {
 	runner := &fakeRunner{available: map[string]bool{"tmux": true, "codex": true}}
 	runner.handle = func(command Command) (string, error) {
 		joined := strings.Join(command.Args, " ")
@@ -519,36 +537,28 @@ func TestPopupOptionsAndDedicatedDetach(t *testing.T) {
 			return "81%", nil
 		case joined == "show-option -gqv @agent_popup_height":
 			return "72%", nil
-		case joined == "list-clients -F #{client_name} #{session_name}":
-			return "client-one codex-project\nother work\n", nil
-		case joined == "list-clients -F #{session_name}":
-			listCount++
-			if listCount == 1 {
-				return "codex-project\n", nil
-			}
-			return "work\n", nil
-		case joined == "show-options -gqv @agent_parent":
-			return "host-client", nil
 		}
 		if out, ok := fakeAgentResponse(command); ok {
 			return out, nil
 		}
 		return "", nil
 	}
-	app := newTestApp(runner, clock, t.TempDir())
+	app := newTestApp(runner, &fakeClock{now: time.Now()}, t.TempDir())
 	app.Stderr = &strings.Builder{}
 	app.Popup(context.Background(), "all", "client-one")
 	calls := commandLines(runner.commands)
 	for _, want := range []string{
-		"tmux detach-client -s codex-project",
-		"tmux display-popup -c host-client -w 81% -h 72% -E '/bin/agent picker' select -provider 'all'",
+		"tmux set-option -g @agent_parent client-one",
+		"tmux display-popup -c client-one -w 81% -h 72% -E '/bin/agent picker' select -provider 'all'",
 	} {
 		if !strings.Contains(calls, want) {
 			t.Fatalf("missing %q in calls:\n%s", want, calls)
 		}
 	}
-	if clock.sleeps != 1 {
-		t.Fatalf("detach polling slept %d times, want 1", clock.sleeps)
+	for _, unwanted := range []string{"list-clients", "detach-client"} {
+		if strings.Contains(calls, unwanted) {
+			t.Fatalf("session name unexpectedly caused %q:\n%s", unwanted, calls)
+		}
 	}
 }
 
@@ -567,7 +577,7 @@ func TestPopupNoHost(t *testing.T) {
 	}
 }
 
-func TestEmptyPopupKeepsDedicatedSessionAttached(t *testing.T) {
+func TestEmptyPopupDoesNotMutateClientState(t *testing.T) {
 	runner := &fakeRunner{available: map[string]bool{"tmux": true}}
 	runner.handle = func(command Command) (string, error) {
 		if strings.Join(command.Args, " ") == "list-clients -F #{client_name} #{session_name}" {

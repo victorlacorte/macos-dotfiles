@@ -37,7 +37,7 @@ func (a *App) Select(ctx context.Context, provider string) {
 		header = "Codex agents: enter jump, ctrl-x terminate"
 	}
 	args := []string{
-		"--delimiter=\\t", "--with-nth=2,6,7,8,9", "--reverse", "--cycle",
+		"--delimiter=\\t", "--with-nth=2,5,6,7,8", "--reverse", "--cycle",
 		"--header=" + header,
 		"--preview=tmux capture-pane -ept {2}", "--preview-window=up,70%,follow",
 		`--bind=ctrl-x:execute-silent(kill {3})+reload(sleep 0.3; "$AGENT_PICKER" list -provider "$AGENT_PICKER_PROVIDER")`,
@@ -55,32 +55,17 @@ func (a *App) Select(ctx context.Context, provider string) {
 		return
 	}
 	fields := strings.Split(selected, "\t")
-	if len(fields) < 5 {
+	if len(fields) < 3 {
 		return
 	}
-	pane, kind, selectedProvider := fields[1], fields[3], fields[4]
+	pane := fields[1]
 	parent := a.tmux(ctx, "show-options", "-gqv", "@agent_parent")
 	session := a.tmux(ctx, "display-message", "-p", "-t", pane, "#{session_name}")
-	if kind == "loose" {
-		if parent != "" {
-			_, _ = a.run(ctx, "tmux", "switch-client", "-c", parent, "-t", session)
-		} else {
-			_, _ = a.run(ctx, "tmux", "switch-client", "-t", session)
-		}
-		_, _ = a.run(ctx, "tmux", "select-window", "-t", pane)
-		_, _ = a.run(ctx, "tmux", "select-pane", "-t", pane)
-		return
-	}
-	origin := a.tmux(ctx, "show-options", "-qv", "-t", session, "@"+selectedProvider+"_agent_origin")
-	if origin == "" {
-		origin = a.tmux(ctx, "show-options", "-qv", "-t", session, "@agent_origin")
-	}
-	if origin != "" && parent != "" {
-		_, _ = a.run(ctx, "tmux", "switch-client", "-c", parent, "-t", origin)
+	if parent != "" {
+		_, _ = a.run(ctx, "tmux", "switch-client", "-c", parent, "-t", session)
+	} else {
+		_, _ = a.run(ctx, "tmux", "switch-client", "-t", session)
 	}
 	_, _ = a.run(ctx, "tmux", "select-window", "-t", pane)
 	_, _ = a.run(ctx, "tmux", "select-pane", "-t", pane)
-	_, _ = a.Runner.Run(ctx, Command{
-		Name: "tmux", Args: []string{"attach-session", "-t", session}, Interactive: true,
-	})
 }
