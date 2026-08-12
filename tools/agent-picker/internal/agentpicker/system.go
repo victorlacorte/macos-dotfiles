@@ -26,6 +26,7 @@ type Runner interface {
 
 type FileSystem interface {
 	Glob(string) ([]string, error)
+	ReadFile(string) ([]byte, error)
 	Stat(string) (os.FileInfo, error)
 	EvalSymlinks(string) (string, error)
 }
@@ -64,6 +65,7 @@ func (OSRunner) Run(ctx context.Context, command Command) (string, error) {
 type OSFileSystem struct{}
 
 func (OSFileSystem) Glob(pattern string) ([]string, error) { return filepath.Glob(pattern) }
+func (OSFileSystem) ReadFile(name string) ([]byte, error)  { return os.ReadFile(name) }
 func (OSFileSystem) Stat(name string) (os.FileInfo, error) { return os.Stat(name) }
 func (OSFileSystem) EvalSymlinks(name string) (string, error) {
 	return filepath.EvalSymlinks(name)

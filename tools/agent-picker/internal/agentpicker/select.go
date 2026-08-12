@@ -36,10 +36,10 @@ func (a *App) Select(ctx context.Context, provider string) {
 		header = label + " agents: enter jump, ctrl-x terminate"
 	}
 	args := []string{
-		"--delimiter=\\t", "--with-nth=2,5,6,7,8", "--reverse", "--cycle",
+		"--delimiter=\\t", "--with-nth=1,3,4,5,6", "--reverse", "--cycle",
 		"--header=" + header,
-		"--preview=tmux capture-pane -ept {2}", "--preview-window=up,70%,follow",
-		`--bind=ctrl-x:execute-silent(kill {3})+reload(sleep 0.3; "$AGENT_PICKER" list -provider "$AGENT_PICKER_PROVIDER")`,
+		"--preview=tmux capture-pane -ept {1}", "--preview-window=up,70%,follow",
+		`--bind=ctrl-x:execute-silent(kill {2})+reload(sleep 0.3; "$AGENT_PICKER" list -provider "$AGENT_PICKER_PROVIDER")`,
 	}
 	args = append(args, extra...)
 
@@ -83,7 +83,7 @@ func (a *App) Select(ctx context.Context, provider string) {
 	if len(fields) < 3 {
 		return
 	}
-	pane := fields[1]
+	pane := fields[0]
 	session := a.tmux(ctx, "display-message", "-p", "-t", pane, "#{session_name}")
 	if client != "" {
 		_, _ = a.run(ctx, "tmux", "switch-client", "-c", client, "-t", session)

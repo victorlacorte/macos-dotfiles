@@ -105,8 +105,6 @@ func installCursor(t *testing.T, home, launcherName string) (launcher, install s
 func fakeAgentResponse(command Command) (string, bool) {
 	joined := strings.Join(command.Args, " ")
 	switch {
-	case command.Name == "claude" && joined == "agents --json":
-		return `[{"pid":100,"status":"waiting","sessionId":"claude-id","cwd":"/tmp/claude","kind":"interactive"}]`, true
 	case command.Name == "ps" && joined == "-Ao pid=,ppid=,tty=,comm=":
 		return "100 1 ttys001 claude\n200 1 ttys002 codex\n" +
 			"300 1 ttys003 /fake/share/cursor-agent/versions/x/node\n", true
@@ -128,6 +126,12 @@ func TestProvidersAndAggregation(t *testing.T) {
 	t.Setenv("CURSOR_CONFIG_DIR", "")
 	t.Setenv("XDG_CONFIG_HOME", "")
 	waitFile := filepath.Join(claudeHome, "projects", "one", "wait-id.jsonl")
+	claudeSessions := map[string]string{
+		"wait.json":   `{"pid":100,"sessionId":"wait-id","cwd":"/tmp/Path With Spaces","kind":"interactive"}`,
+		"busy.json":   `{"pid":101,"sessionId":"busy-id","cwd":"` + home + `","kind":"interactive"}`,
+		"hidden.json": `{"pid":999,"sessionId":"hidden","cwd":"/tmp","kind":"interactive"}`,
+		"worker.json": `{"pid":998,"sessionId":"worker","cwd":"/tmp","kind":"background"}`,
+	}
 	oldRollout := filepath.Join(codexHome, "sessions", "2026", "rollout-old.jsonl")
 	newRollout := filepath.Join(codexHome, "sessions", "2026", "rollout-new.jsonl")
 	chatStore := filepath.Join(home, ".cursor", "chats", "project hash", "chat-id", "store.db")
@@ -138,6 +142,15 @@ func TestProvidersAndAggregation(t *testing.T) {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(file, []byte("{}\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, contents := range claudeSessions {
+		file := filepath.Join(claudeHome, "sessions", name)
+		if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(file, []byte(contents), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -153,19 +166,12 @@ func TestProvidersAndAggregation(t *testing.T) {
 		}
 	}
 	runner := &fakeRunner{
-		available: map[string]bool{"claude": true, "codex": true, "cursor-agent": true, "lsof": true},
+		available: map[string]bool{"codex": true, "cursor-agent": true, "lsof": true},
 		paths:     map[string]string{"cursor-agent": cursorLauncher},
 	}
 	runner.handle = func(command Command) (string, error) {
 		joined := command.Name + " " + strings.Join(command.Args, " ")
 		switch {
-		case joined == "claude agents --json":
-			return `[
- {"pid":100,"status":"waiting","sessionId":"wait-id","cwd":"/tmp/Path With Spaces","kind":"interactive"},
- {"pid":101,"status":"busy","sessionId":"busy-id","cwd":"` + home + `","kind":"interactive"},
- {"pid":999,"status":"idle","sessionId":"hidden","cwd":"/tmp","kind":"interactive"},
- {"pid":998,"status":"busy","sessionId":"worker","cwd":"/tmp","kind":"background"}
-]`, nil
 		case joined == "ps -Ao pid=,ppid=,tty=,comm=":
 			return "100 1 ttys001 claude\n101 1 ttys002 claude\n" +
 				"200 1 ttys003 /mock/codex\n201 200 ttys003 codex\n206 1 ttys003 codex\n202 1 ttys004 codex\n203 1 ttys004 codex-helper\n" +
@@ -199,19 +205,29 @@ func TestProvidersAndAggregation(t *testing.T) {
 	if got := countCommandPrefix(commands, "tmux", "list-panes -a"); got != 1 {
 		t.Fatalf("pane inventory ran %d times, want 1:\n%s", got, commandLines(commands))
 	}
+	for _, lookup := range runner.Lookups() {
+		if lookup == "claude" {
+			t.Fatalf("Claude executable was looked up: %#v", runner.Lookups())
+		}
+	}
+	for _, command := range commands {
+		if command.Name == "claude" {
+			t.Fatalf("Claude executable was run: %#v", command)
+		}
+	}
 	if len(agents) != 5 {
 		t.Fatalf("got %d agents: %#v", len(agents), agents)
 	}
-	if agents[0].Provider != "claude" || agents[0].State != "waiting" || agents[0].Activity.Unix() != waitTime.Unix() {
-		t.Fatalf("waiting Claude agent not ranked first: %#v", agents[0])
+	if agents[0].Provider != "claude" || agents[0].Activity.Unix() != waitTime.Unix() {
+		t.Fatalf("most recently active Claude agent not ranked first: %#v", agents[0])
 	}
-	assertAgent(t, agents, Agent{Provider: "claude", Pane: "%2", PID: 101, State: "working", Location: "claude-two:1.1", Path: "~"})
-	assertAgent(t, agents, Agent{Provider: "codex", Pane: "%3", PID: 200, State: "running", Location: "codex-three:1.1", Path: "~/Project With Spaces", Activity: newTime})
-	assertAgent(t, agents, Agent{Provider: "codex", Pane: "%4", PID: 202, State: "running", Location: "work:2.1", Path: "/tmp/loose path"})
-	assertAgent(t, agents, Agent{Provider: "cursor", Pane: "%5", PID: 300, State: "running", Location: "cursor-five:1.1", Path: "/tmp/cursor path", Activity: freshChat})
+	assertAgent(t, agents, Agent{Provider: "claude", Pane: "%2", PID: 101, Location: "claude-two:1.1", Path: "~"})
+	assertAgent(t, agents, Agent{Provider: "codex", Pane: "%3", PID: 200, Location: "codex-three:1.1", Path: "~/Project With Spaces", Activity: newTime})
+	assertAgent(t, agents, Agent{Provider: "codex", Pane: "%4", PID: 202, Location: "work:2.1", Path: "/tmp/loose path"})
+	assertAgent(t, agents, Agent{Provider: "cursor", Pane: "%5", PID: 300, Location: "cursor-five:1.1", Path: "/tmp/cursor path", Activity: freshChat})
 	rows := app.Rows(context.Background(), "all")
-	if !strings.Contains(rows, "\tclaude\twaiting\t   1m\t") || !strings.Contains(rows, "\tcodex\trunning\t   2m\t") ||
-		!strings.Contains(rows, "\tcursor\trunning\t   4m\t") {
+	if !strings.Contains(rows, "\tclaude\t   1m\t") || !strings.Contains(rows, "\tcodex \t   2m\t") ||
+		!strings.Contains(rows, "\tcursor\t   4m\t") {
 		t.Fatalf("unexpected formatted rows:\n%s", rows)
 	}
 }
@@ -219,15 +235,13 @@ func TestProvidersAndAggregation(t *testing.T) {
 func TestDiscoveryTasksOverlap(t *testing.T) {
 	entered := make(chan string, 4)
 	release := make(chan struct{})
-	runner := &fakeRunner{available: map[string]bool{"claude": true, "codex": true}}
+	runner := &fakeRunner{available: map[string]bool{"codex": true}}
 	runner.handleCtx = func(ctx context.Context, command Command) (string, error) {
 		joined := strings.Join(command.Args, " ")
 		name := ""
 		switch {
 		case command.Name == "ps":
 			name = "process"
-		case command.Name == "claude":
-			name = "claude"
 		case command.Name == "tmux" && strings.HasPrefix(joined, "list-panes"):
 			name = "panes"
 		case command.Name == "tmux" && strings.Contains(joined, "@codex_agent_process_name"):
@@ -241,9 +255,6 @@ func TestDiscoveryTasksOverlap(t *testing.T) {
 				return "", ctx.Err()
 			}
 		}
-		if command.Name == "claude" {
-			return "[]", nil
-		}
 		return "", nil
 	}
 	app := newTestApp(runner, &fakeClock{now: time.Now()}, t.TempDir())
@@ -254,7 +265,7 @@ func TestDiscoveryTasksOverlap(t *testing.T) {
 	}()
 
 	seen := make(map[string]bool)
-	for len(seen) < 4 {
+	for len(seen) < 3 {
 		select {
 		case name := <-entered:
 			seen[name] = true
@@ -307,8 +318,8 @@ func TestCodexBatchesLsofAndKeepsPartialOutput(t *testing.T) {
 	}
 	app := newTestApp(runner, &fakeClock{now: now}, home)
 	agents := app.Agents(context.Background(), "codex")
-	assertAgent(t, agents, Agent{Provider: "codex", Pane: "%1", PID: 10, State: "running", Activity: oneTime, Location: "one:1.1", Path: "/tmp/one"})
-	assertAgent(t, agents, Agent{Provider: "codex", Pane: "%2", PID: 20, State: "running", Activity: twoTime, Location: "two:1.1", Path: "/tmp/two"})
+	assertAgent(t, agents, Agent{Provider: "codex", Pane: "%1", PID: 10, Activity: oneTime, Location: "one:1.1", Path: "/tmp/one"})
+	assertAgent(t, agents, Agent{Provider: "codex", Pane: "%2", PID: 20, Activity: twoTime, Location: "two:1.1", Path: "/tmp/two"})
 	if got := countCommand(runner.Commands(), "lsof", "-a -p 10,20 -Fn"); got != 1 {
 		t.Fatalf("lsof ran %d times, want one batch:\n%s", got, commandLines(runner.Commands()))
 	}
@@ -362,9 +373,9 @@ func TestCursorIdentifiesSessionLeaders(t *testing.T) {
 	if len(agents) != 3 {
 		t.Fatalf("got %d agents, want the three paned sessions: %#v", len(agents), agents)
 	}
-	assertAgent(t, agents, Agent{Provider: "cursor", Pane: "%2", PID: 400, State: "running", Location: "cursor:1.1", Path: "/tmp/cursor", Activity: chatTime})
-	assertAgent(t, agents, Agent{Provider: "cursor", Pane: "%4", PID: 600, State: "running", Location: "helper:1.1", Path: "/tmp/helper"})
-	assertAgent(t, agents, Agent{Provider: "cursor", Pane: "%6", PID: 701, State: "running", Location: "detached:1.1", Path: "/tmp/detached"})
+	assertAgent(t, agents, Agent{Provider: "cursor", Pane: "%2", PID: 400, Location: "cursor:1.1", Path: "/tmp/cursor", Activity: chatTime})
+	assertAgent(t, agents, Agent{Provider: "cursor", Pane: "%4", PID: 600, Location: "helper:1.1", Path: "/tmp/helper"})
+	assertAgent(t, agents, Agent{Provider: "cursor", Pane: "%6", PID: 701, Location: "detached:1.1", Path: "/tmp/detached"})
 }
 
 func TestCursorChatsDirPrecedence(t *testing.T) {
@@ -417,7 +428,7 @@ func TestCursorHonorsProcessNameOption(t *testing.T) {
 	if len(agents) != 1 {
 		t.Fatalf("got %d agents, want the renamed launcher: %#v", len(agents), agents)
 	}
-	assertAgent(t, agents, Agent{Provider: "cursor", Pane: "%1", PID: 800, State: "running", Location: "renamed:1.1", Path: "/tmp/renamed"})
+	assertAgent(t, agents, Agent{Provider: "cursor", Pane: "%1", PID: 800, Location: "renamed:1.1", Path: "/tmp/renamed"})
 }
 
 func TestCursorIgnoresUnrelatedProcessesNamedAgent(t *testing.T) {
@@ -471,11 +482,8 @@ func assertAgent(t *testing.T, agents []Agent, want Agent) {
 }
 
 func TestProviderDegradation(t *testing.T) {
-	runner := &fakeRunner{available: map[string]bool{"claude": true, "codex": true}}
+	runner := &fakeRunner{available: map[string]bool{"codex": true}}
 	runner.handle = func(command Command) (string, error) {
-		if command.Name == "claude" {
-			return "{malformed", nil
-		}
 		if command.Name == "ps" {
 			return "200 1 ttys001 codex\n", nil
 		}
@@ -495,25 +503,23 @@ func TestProviderDegradation(t *testing.T) {
 	}
 }
 
-func TestClaudeDiscoveryUsesPathResolvedClaude(t *testing.T) {
-	runner := &fakeRunner{available: map[string]bool{"claude": true}}
-	runner.handle = func(command Command) (string, error) {
-		if command.Name == "claude" && strings.Join(command.Args, " ") == "agents --json" {
-			return "[]", nil
-		}
-		return "", nil
-	}
+func TestClaudeDiscoveryDoesNotUseClaudeExecutable(t *testing.T) {
+	runner := &fakeRunner{}
 	app := newTestApp(runner, &fakeClock{now: time.Now()}, t.TempDir())
 
 	if agents := app.Agents(context.Background(), "claude"); len(agents) != 0 {
 		t.Fatalf("unexpected Claude agents: %#v", agents)
 	}
-	if !reflect.DeepEqual(runner.Lookups(), []string{"claude"}) {
-		t.Fatalf("Claude executable lookups: got %#v, want exactly claude", runner.Lookups())
+	for _, lookup := range runner.Lookups() {
+		if lookup == "claude" {
+			t.Fatalf("Claude executable was looked up: %#v", runner.Lookups())
+		}
 	}
 	commands := runner.Commands()
-	if !hasCommand(commands, "claude", "agents --json") {
-		t.Fatalf("Claude discovery command missing from %#v", commands)
+	for _, command := range commands {
+		if command.Name == "claude" {
+			t.Fatalf("Claude executable was run: %#v", command)
+		}
 	}
 	for _, command := range commands {
 		if command.Name == "tmux" && len(command.Args) > 0 && command.Args[0] == "show-option" {
@@ -541,26 +547,26 @@ func TestSplitShellWords(t *testing.T) {
 func TestExactRowFormattingAndSorting(t *testing.T) {
 	now := time.Unix(1_000, 0)
 	agents := []Agent{
-		{Provider: "claude", Pane: "%3", PID: 3, State: "working", Location: "work:2.1", Path: "/tmp/three", Activity: time.Unix(820, 0)},
-		{Provider: "codex", Pane: "%2", PID: 2, State: "running", Location: "codex-two:1.1", Path: "/tmp/two"},
-		{Provider: "claude", Pane: "%1", PID: 1, State: "waiting", Location: "work:1.1", Path: "/tmp/one", Activity: time.Unix(940, 0)},
+		{Provider: "claude", Pane: "%3", PID: 3, Location: "work:2.1", Path: "/tmp/three", Activity: time.Unix(820, 0)},
+		{Provider: "codex", Pane: "%2", PID: 2, Location: "codex-two:1.1", Path: "/tmp/two"},
+		{Provider: "claude", Pane: "%1", PID: 1, Location: "work:1.1", Path: "/tmp/one", Activity: time.Unix(940, 0)},
 	}
 	SortAgents(agents, now)
 	rows := FormatRows(agents, now)
 	want := []string{
-		"0\t%1\t1\tclaude\twaiting\t   1m\twork:1.1     \t/tmp/one  \t1",
-		"2\t%2\t2\tcodex\trunning\t    -\tcodex-two:1.1\t/tmp/two  \t0",
-		"3\t%3\t3\tclaude\tworking\t   3m\twork:2.1     \t/tmp/three\t3",
+		"%1\t1\tclaude\t   1m\twork:1.1     \t/tmp/one  \t1",
+		"%3\t3\tclaude\t   3m\twork:2.1     \t/tmp/three\t3",
+		"%2\t2\tcodex \t    -\tcodex-two:1.1\t/tmp/two  \t0",
 	}
 	if !reflect.DeepEqual(rows, want) {
 		t.Fatalf("rows mismatch\n got: %#v\nwant: %#v", rows, want)
 	}
 	for _, row := range rows {
 		fields := strings.Split(row, "\t")
-		if len(fields) != 9 {
-			t.Fatalf("row has %d TSV fields, want 9: %q", len(fields), row)
+		if len(fields) != 7 {
+			t.Fatalf("row has %d TSV fields, want 7: %q", len(fields), row)
 		}
-		starts := terminalFieldStarts(fields[6:])
+		starts := terminalFieldStarts(fields[4:])
 		if starts[1] != 16 || starts[2] != 32 {
 			t.Fatalf("unaligned presentation columns in %q: path=%d age=%d", row, starts[1], starts[2])
 		}
@@ -586,7 +592,7 @@ func TestCLICommandsAndProviders(t *testing.T) {
 			for _, provider := range []string{"all", "claude", "codex", "cursor"} {
 				name := command + "/" + dash + "/" + provider
 				t.Run(name, func(t *testing.T) {
-					runner := &fakeRunner{available: map[string]bool{"tmux": true, "fzf": true, "claude": true, "codex": true, "cursor-agent": true}}
+					runner := &fakeRunner{available: map[string]bool{"tmux": true, "fzf": true, "codex": true, "cursor-agent": true}}
 					runner.handle = func(command Command) (string, error) {
 						out, _ := fakeAgentResponse(command)
 						return out, nil
@@ -614,10 +620,9 @@ func TestCLICommandsAndProviders(t *testing.T) {
 							t.Fatalf("select was not dispatched with provider %q:\n%s", provider, calls)
 						}
 					case "list":
-						wantClaude := provider == "all" || provider == "claude"
 						wantCodex := provider == "all" || provider == "codex"
 						wantCursor := provider == "all" || provider == "cursor"
-						if strings.Contains(calls, "claude agents --json") != wantClaude ||
+						if strings.Contains(calls, "claude agents --json") ||
 							!strings.Contains(calls, "ps -Ao pid=,ppid=,tty=,comm=") ||
 							strings.Contains(calls, "@codex_agent_process_name") != wantCodex ||
 							strings.Contains(calls, "@cursor_agent_process_name") != wantCursor {
@@ -722,8 +727,8 @@ func TestSelectionNavigationAndCancellation(t *testing.T) {
 		sessionName string
 	}{
 		{name: "cancel", notWant: "switch-client"},
-		{name: "without parent", selected: "2\t%5\t202\tcodex\trunning\t    -\twork:3.1\t/tmp\t0\n", sessionName: "work", want: []string{"switch-client -t work", "select-window -t %5", "select-pane -t %5"}},
-		{name: "prefixed session", selected: "2\t%4\t200\tcodex\trunning\t    -\tcodex-four:1.1\t/tmp\t0\n", parent: "outer-client", sessionName: "codex-four", want: []string{"switch-client -c outer-client -t codex-four", "select-window -t %4", "select-pane -t %4"}, notWant: "attach-session"},
+		{name: "without parent", selected: "%5\t202\tcodex \t    -\twork:3.1\t/tmp\t0\n", sessionName: "work", want: []string{"switch-client -t work", "select-window -t %5", "select-pane -t %5"}},
+		{name: "prefixed session", selected: "%4\t200\tcodex \t    -\tcodex-four:1.1\t/tmp\t0\n", parent: "outer-client", sessionName: "codex-four", want: []string{"switch-client -c outer-client -t codex-four", "select-window -t %4", "select-pane -t %4"}, notWant: "attach-session"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -733,7 +738,7 @@ func TestSelectionNavigationAndCancellation(t *testing.T) {
 				joined := strings.Join(command.Args, " ")
 				switch {
 				case command.Name == "fzf":
-					if !strings.Contains(joined, "kill {3}") || !strings.Contains(joined, "list -provider") {
+					if !strings.Contains(joined, "kill {2}") || !strings.Contains(joined, "list -provider") {
 						t.Fatalf("termination/reload binding missing: %s", joined)
 					}
 					return tt.selected, nil
@@ -767,15 +772,15 @@ func TestSelectionStartsFZFBeforeDiscoveryCompletes(t *testing.T) {
 	discoveryStarted := make(chan struct{})
 	fzfStarted := make(chan struct{})
 	releaseDiscovery := make(chan struct{})
-	runner := &fakeRunner{available: map[string]bool{"tmux": true, "fzf": true, "claude": true}}
+	runner := &fakeRunner{available: map[string]bool{"tmux": true, "fzf": true}}
 	var discoveryOnce, fzfOnce sync.Once
 	runner.handleCtx = func(ctx context.Context, command Command) (string, error) {
 		switch command.Name {
-		case "claude":
+		case "ps":
 			discoveryOnce.Do(func() { close(discoveryStarted) })
 			select {
 			case <-releaseDiscovery:
-				return "[]", nil
+				return "", nil
 			case <-ctx.Done():
 				return "", ctx.Err()
 			}
@@ -817,11 +822,11 @@ func TestSelectionStartsFZFBeforeDiscoveryCompletes(t *testing.T) {
 func TestSelectionEscapeCancelsBlockedDiscovery(t *testing.T) {
 	discoveryStarted := make(chan struct{})
 	discoveryStopped := make(chan struct{})
-	runner := &fakeRunner{available: map[string]bool{"tmux": true, "fzf": true, "claude": true}}
+	runner := &fakeRunner{available: map[string]bool{"tmux": true, "fzf": true}}
 	var startedOnce, stoppedOnce sync.Once
 	runner.handleCtx = func(ctx context.Context, command Command) (string, error) {
 		switch command.Name {
-		case "claude":
+		case "ps":
 			startedOnce.Do(func() { close(discoveryStarted) })
 			<-ctx.Done()
 			stoppedOnce.Do(func() { close(discoveryStopped) })
@@ -867,7 +872,7 @@ func TestSelectionReceivesAlignedTSVRows(t *testing.T) {
 			return "/dev/ttys001\t%5\twork\twork:1.1\t/tmp/x\n" +
 				"/dev/ttys002\t%6\tcodex-long\tcodex-long:1.1\t/tmp/a much longer path\n", nil
 		case command.Name == "fzf":
-			if !strings.Contains(joined, "kill {3}") {
+			if !strings.Contains(joined, "kill {2}") {
 				t.Fatalf("kill binding no longer targets the PID field: %s", joined)
 			}
 			input, err := io.ReadAll(command.Input)
@@ -881,14 +886,14 @@ func TestSelectionReceivesAlignedTSVRows(t *testing.T) {
 			}
 			for i, line := range lines {
 				fields := strings.Split(line, "\t")
-				if len(fields) != 9 {
+				if len(fields) != 7 {
 					t.Fatalf("fzf row %d has %d TSV fields: %q", i, len(fields), line)
 				}
 				wantPane, wantPID := []string{"%5", "%6"}[i], []string{"200", "201"}[i]
-				if fields[1] != wantPane || fields[2] != wantPID || fields[8] != "0" {
+				if fields[0] != wantPane || fields[1] != wantPID || fields[6] != "0" {
 					t.Fatalf("navigation/kill/age fields changed in row %d: %#v", i, fields)
 				}
-				if len(fields[6]) != len("codex-long:1.1") || len(fields[7]) != len("/tmp/a much longer path") {
+				if len(fields[4]) != len("codex-long:1.1") || len(fields[5]) != len("/tmp/a much longer path") {
 					t.Fatalf("presentation fields are not padded to common widths: %#v", fields)
 				}
 			}
@@ -1025,12 +1030,9 @@ func TestEmptySelectClosesFZFAndMessagesOriginatingClient(t *testing.T) {
 		t.Run(tt.provider, func(t *testing.T) {
 			t.Setenv("AGENT_PICKER_CLIENT", "origin-client")
 			runner := &fakeRunner{available: map[string]bool{
-				"tmux": true, "fzf": true, "claude": true, "codex": true, "cursor-agent": true,
+				"tmux": true, "fzf": true, "codex": true, "cursor-agent": true,
 			}}
 			runner.handle = func(command Command) (string, error) {
-				if command.Name == "claude" {
-					return "[]", nil
-				}
 				if command.Name == "fzf" {
 					_, err := io.ReadAll(command.Input)
 					return "", err

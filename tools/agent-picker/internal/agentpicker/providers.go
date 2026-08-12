@@ -44,29 +44,34 @@ func (a *App) startInventory(ctx context.Context) *discoveryInventory {
 // The Claude adapter retains behavior adapted from
 // craftzdog/tmux-claude-session-manager. See THIRD_PARTY_NOTICES.md.
 func (a *App) collectClaudeAgents(ctx context.Context, inventory *discoveryInventory) []Agent {
-	var records []struct {
-		PID       int    `json:"pid"`
-		Status    string `json:"status"`
-		SessionID string `json:"sessionId"`
-		CWD       string `json:"cwd"`
-		Kind      string `json:"kind"`
-	}
-	available := false
-	if _, err := a.Runner.LookPath("claude"); err == nil {
-		out, runErr := a.run(ctx, "claude", "agents", "--json")
-		if runErr == nil && json.Unmarshal([]byte(out), &records) == nil {
-			available = true
-		}
-	}
-
-	inventory.wg.Wait()
-	if !available {
-		return nil
-	}
 	config := getenv("CLAUDE_CONFIG_DIR")
 	if config == "" {
 		config = filepath.Join(a.Home, ".claude")
 	}
+	matches, _ := a.FS.Glob(filepath.Join(config, "sessions", "*.json"))
+	var records []struct {
+		PID       int    `json:"pid"`
+		SessionID string `json:"sessionId"`
+		CWD       string `json:"cwd"`
+		Kind      string `json:"kind"`
+	}
+	for _, match := range matches {
+		data, err := a.FS.ReadFile(match)
+		if err != nil {
+			continue
+		}
+		var record struct {
+			PID       int    `json:"pid"`
+			SessionID string `json:"sessionId"`
+			CWD       string `json:"cwd"`
+			Kind      string `json:"kind"`
+		}
+		if json.Unmarshal(data, &record) == nil {
+			records = append(records, record)
+		}
+	}
+
+	inventory.wg.Wait()
 
 	var agents []Agent
 	for _, record := range records {
@@ -81,16 +86,9 @@ func (a *App) collectClaudeAgents(ctx context.Context, inventory *discoveryInven
 		if !ok {
 			continue
 		}
-		state := "?"
-		switch record.Status {
-		case "waiting", "idle":
-			state = record.Status
-		case "busy":
-			state = "working"
-		}
 		agents = append(agents, Agent{
 			Provider: "claude", Pane: pane.ID, PID: record.PID,
-			State: state, Activity: a.transcriptMTime(config, record.SessionID),
+			Activity: a.transcriptMTime(config, record.SessionID),
 			Location: pane.Location, Path: shortenHome(record.CWD, a.Home),
 		})
 	}
@@ -185,7 +183,7 @@ func (a *App) collectCodexAgents(ctx context.Context, inventory *discoveryInvent
 		process, pane := leaders[tty], inventory.panes[tty]
 		agents = append(agents, Agent{
 			Provider: "codex", Pane: pane.ID, PID: process.pid,
-			State: "running", Activity: activity[process.pid],
+			Activity: activity[process.pid],
 			Location: pane.Location, Path: shortenHome(pane.Path, a.Home),
 		})
 	}
@@ -280,7 +278,7 @@ func (a *App) collectCursorAgents(ctx context.Context, inventory *discoveryInven
 		process, pane := leaders[tty], inventory.panes[tty]
 		agents = append(agents, Agent{
 			Provider: "cursor", Pane: pane.ID, PID: process.pid,
-			State: "running", Activity: activity[process.pid],
+			Activity: activity[process.pid],
 			Location: pane.Location, Path: shortenHome(pane.Path, a.Home),
 		})
 	}

@@ -13,23 +13,9 @@ type Agent struct {
 	Provider string
 	Pane     string
 	PID      int
-	State    string
 	Activity time.Time
 	Location string
 	Path     string
-}
-
-func rank(agent Agent) int {
-	switch {
-	case agent.Provider == "claude" && agent.State == "waiting":
-		return 0
-	case agent.Provider == "claude" && agent.State == "idle":
-		return 1
-	case agent.Provider == "claude" && agent.State == "working":
-		return 3
-	default:
-		return 2
-	}
 }
 
 func ageMinutes(now time.Time, activity time.Time) int {
@@ -46,10 +32,11 @@ func ageMinutes(now time.Time, activity time.Time) int {
 func SortAgents(agents []Agent, now time.Time) {
 	sort.SliceStable(agents, func(i, j int) bool {
 		a, b := agents[i], agents[j]
-		if rank(a) != rank(b) {
-			return rank(a) < rank(b)
+		aUnknown, bUnknown := a.Activity.IsZero(), b.Activity.IsZero()
+		if aUnknown != bUnknown {
+			return !aUnknown
 		}
-		if ageMinutes(now, a.Activity) != ageMinutes(now, b.Activity) {
+		if !aUnknown && ageMinutes(now, a.Activity) != ageMinutes(now, b.Activity) {
 			return ageMinutes(now, a.Activity) < ageMinutes(now, b.Activity)
 		}
 		if a.Pane != b.Pane {
@@ -83,9 +70,9 @@ func formatRow(agent Agent, now time.Time, locationWidth, pathWidth int) string 
 	if !agent.Activity.IsZero() {
 		age = strconv.Itoa(ageNumber) + "m"
 	}
-	return fmt.Sprintf("%d\t%s\t%d\t%s\t%s\t%5s\t%-*s\t%-*s\t%d",
-		rank(agent), agent.Pane, agent.PID, agent.Provider,
-		agent.State, age, locationWidth, agent.Location, pathWidth, agent.Path, ageNumber)
+	return fmt.Sprintf("%s\t%d\t%-6s\t%5s\t%-*s\t%-*s\t%d",
+		agent.Pane, agent.PID, agent.Provider, age,
+		locationWidth, agent.Location, pathWidth, agent.Path, ageNumber)
 }
 
 func trimLine(value string) string { return strings.TrimRight(value, "\r\n") }
