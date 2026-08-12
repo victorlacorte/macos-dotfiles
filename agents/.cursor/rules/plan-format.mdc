@@ -1,0 +1,6 @@
+---
+description: Formatting preferences for generated plans
+alwaysApply: true
+---
+
+Plan filenames must use kebab-case: lowercase words separated by `-` (regular dash), with no spaces or underscores. For example: `foo-bar.md`.
