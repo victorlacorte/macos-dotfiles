@@ -27,17 +27,17 @@ binary. The binaries are local build artifacts and are not committed.
 `prefix Space` opens the project sessionizer.
 
 `prefix u` opens one picker for running Claude Code, Codex, and Cursor TUI
-panes. It shows each provider, status, activity age, tmux location, working
+panes. It shows each provider, activity age, tmux location, working
 path, and a live pane preview. Press `enter` to jump to an agent or `ctrl-x` to
 terminate its process and reload the list.
 
-Claude reports detailed `waiting`, `idle`, and `working` states through
-`claude agents --json`. Codex is detected passively by joining exact `codex`
-processes to tmux panes through their TTYs, so its conservative status is always
-`running`. Its age comes from the newest open
+Claude is discovered from interactive session files under
+`CLAUDE_CONFIG_DIR` (or `~/.claude`) and joined to tmux panes through `ps` and
+TTYs. Codex is detected passively by joining exact `codex` processes to tmux
+panes through their TTYs. Its age comes from the newest open
 `$CODEX_HOME/sessions/**/rollout-*.jsonl` when `lsof` is available.
 
-Cursor is detected passively as well, and its status is always `running` too.
+Cursor is detected passively as well.
 Its launcher replaces `argv[0]` with the invoked path, usually a link such as
 `~/.local/bin/agent`, so a process belongs to Cursor when that path resolves
 into the Cursor installation root. The same test covers the bundled `node`
@@ -48,12 +48,12 @@ configuration directory's `chats` directory when `lsof` is available. The
 configuration directory is resolved from `CURSOR_CONFIG_DIR`, then
 `$XDG_CONFIG_HOME/cursor`, then `~/.cursor`.
 
-Only tmux 3.2 or newer and `fzf` are required at runtime. Claude Code enables
-the Claude provider; Codex enables the Codex provider; the launcher named by
-`@cursor_agent_process_name` enables the Cursor provider (default:
-`cursor-agent`); and `lsof` adds Codex and Cursor activity ages. Claude JSON is
-decoded directly, so `jq` is no longer required. A missing optional command
-disables only that provider or metadata.
+Only tmux 3.2 or newer and `fzf` are required at runtime. Codex enables the
+Codex provider; the launcher named by `@cursor_agent_process_name` enables the
+Cursor provider (default: `cursor-agent`); and `lsof` adds Codex and Cursor
+activity ages. Claude session files are decoded directly, so neither the Claude
+executable nor `jq` is required on `PATH`. A missing optional command disables
+only that provider or metadata.
 
 The popup and `fzf` frame appear immediately while agent discovery runs. When
 no running agents match the selected provider, the empty picker closes and a
@@ -92,8 +92,8 @@ Selecting an agent focuses its tmux session, window, and pane in place.
 
 The provider adapters use structured Go values internally and only format TSV
 at the fzf boundary, so a future Codex app-server adapter can replace passive
-process discovery and add accurate working/waiting/idle states without changing
-the picker UI.
+process discovery and add richer activity metadata without changing the picker
+UI.
 
 The Claude metadata adapter is adapted from
 `craftzdog/tmux-claude-session-manager`; see `THIRD_PARTY_NOTICES.md` for the
