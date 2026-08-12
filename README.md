@@ -9,16 +9,18 @@ brew install tree-sitter-cli
 brew install fzf
 ```
 
-The tmux agent picker source lives in `tools/agent-picker` and requires Go 1.22
-or newer. Build and install it locally from the repository root with:
+The tmux agent picker and snapshot sources live in `tools/agent-picker` and
+`tools/tmux-snapshot`, and require Go 1.22 or newer. Build and install them
+locally from the repository root with:
 
 ```sh
 make install-agent-picker
+make install-tmux-snapshot
 ```
 
-This installs `agent-picker` in `$HOME/.local/bin`. Re-run the command after
-updating these dotfiles to rebuild the binary. The binary is a local build
-artifact and is not committed.
+These install `agent-picker` and `tmux-snapshot` in `$HOME/.local/bin`.
+Re-run the relevant command after updating these dotfiles to rebuild the
+binary. The binaries are local build artifacts and are not committed.
 
 ## Tmux
 
@@ -96,6 +98,33 @@ the picker UI.
 The Claude metadata adapter is adapted from
 `craftzdog/tmux-claude-session-manager`; see `THIRD_PARTY_NOTICES.md` for the
 upstream MIT license notice.
+
+### Tmux snapshots
+
+Save and restore tmux sessions, windows, working directories, window indices,
+manual window names, and the active session/window:
+
+```sh
+tmux-snapshot save
+tmux-snapshot restore
+```
+
+Snapshots are stored in
+`${XDG_STATE_HOME:-$HOME/.local/state}/tmux-snapshot/`. The `latest` symlink is
+used by restore when no file is provided; if it is missing, restore falls back to
+the newest `.json` file in that directory. Snapshots are JSON files named with
+their UTC save time. Running processes, scrollback, pane splits, and pane layouts
+are not captured. Pass a file path to either command to save or restore a
+specific snapshot. There is no picker: selecting an older snapshot means naming
+its path.
+
+Saving to an explicit path does not update the `latest` symlink, so such a
+snapshot never becomes the default for restore.
+
+Restore only adds sessions. A session whose name already exists is left
+untouched, and one whose recorded path no longer exists is skipped with a
+warning. A session that fails partway through is rolled back and killed, leaving
+the rest of the snapshot to restore normally.
 
 ## Git
 
