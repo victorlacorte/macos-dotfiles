@@ -17,6 +17,7 @@ import (
 type fakeRunner struct {
 	mu        sync.Mutex
 	available map[string]bool
+	paths     map[string]string
 	handle    func(Command) (string, error)
 	handleCtx func(context.Context, Command) (string, error)
 	commands  []Command
@@ -27,7 +28,13 @@ func (r *fakeRunner) LookPath(name string) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.lookups = append(r.lookups, name)
+	if path, ok := r.paths[name]; ok {
+		return path, nil
+	}
 	if r.available[name] {
+		if name == "cursor-agent" {
+			return "/fake/share/cursor-agent/versions/x/cursor-agent", nil
+		}
 		return "/fake/" + filepath.Base(name), nil
 	}
 	return "", errors.New("not found")
@@ -69,16 +76,44 @@ func newTestApp(runner *fakeRunner, clock *fakeClock, home string) *App {
 	return &App{Runner: runner, FS: OSFileSystem{}, Clock: clock, Home: home, Executable: "/bin/agent picker"}
 }
 
+// installCursor mirrors a real Cursor CLI installation, where the launcher on
+// PATH is a link into a versioned directory.
+func installCursor(t *testing.T, home, launcherName string) (launcher, install string) {
+	t.Helper()
+	install = filepath.Join(home, ".local", "share", "cursor-agent", "versions", "x")
+	launcher = filepath.Join(home, ".local", "bin", launcherName)
+	if err := os.MkdirAll(install, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(launcher), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	binary := filepath.Join(install, "cursor-agent")
+	if err := os.WriteFile(binary, nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(binary, launcher); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := filepath.EvalSymlinks(install)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return launcher, resolved
+}
+
 func fakeAgentResponse(command Command) (string, bool) {
 	joined := strings.Join(command.Args, " ")
 	switch {
 	case command.Name == "claude" && joined == "agents --json":
 		return `[{"pid":100,"status":"waiting","sessionId":"claude-id","cwd":"/tmp/claude","kind":"interactive"}]`, true
 	case command.Name == "ps" && joined == "-Ao pid=,ppid=,tty=,comm=":
-		return "100 1 ttys001 claude\n200 1 ttys002 codex\n", true
+		return "100 1 ttys001 claude\n200 1 ttys002 codex\n" +
+			"300 1 ttys003 /fake/share/cursor-agent/versions/x/node\n", true
 	case command.Name == "tmux" && strings.HasPrefix(joined, "list-panes -a"):
 		return "/dev/ttys001\t%8\twork\twork:1.1\t/tmp/claude\n" +
-			"/dev/ttys002\t%9\tcodex-project\tcodex-project:1.1\t/tmp/codex\n", true
+			"/dev/ttys002\t%9\tcodex-project\tcodex-project:1.1\t/tmp/codex\n" +
+			"/dev/ttys003\t%10\tcursor-project\tcursor-project:1.1\t/tmp/cursor\n", true
 	default:
 		return "", false
 	}
@@ -90,10 +125,15 @@ func TestProvidersAndAggregation(t *testing.T) {
 	codexHome := filepath.Join(home, "Codex Home")
 	t.Setenv("CLAUDE_CONFIG_DIR", claudeHome)
 	t.Setenv("CODEX_HOME", codexHome)
+	t.Setenv("CURSOR_CONFIG_DIR", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
 	waitFile := filepath.Join(claudeHome, "projects", "one", "wait-id.jsonl")
 	oldRollout := filepath.Join(codexHome, "sessions", "2026", "rollout-old.jsonl")
 	newRollout := filepath.Join(codexHome, "sessions", "2026", "rollout-new.jsonl")
-	for _, file := range []string{waitFile, oldRollout, newRollout} {
+	chatStore := filepath.Join(home, ".cursor", "chats", "project hash", "chat-id", "store.db")
+	chatWAL := filepath.Join(home, ".cursor", "chats", "project hash", "chat-id", "store.db-wal")
+	cursorLauncher, cursorInstall := installCursor(t, home, "agent")
+	for _, file := range []string{waitFile, oldRollout, newRollout, chatStore, chatWAL} {
 		if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -103,12 +143,19 @@ func TestProvidersAndAggregation(t *testing.T) {
 	}
 	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
 	waitTime, oldTime, newTime := now.Add(-time.Minute), now.Add(-3*time.Minute), now.Add(-2*time.Minute)
-	for file, stamp := range map[string]time.Time{waitFile: waitTime, oldRollout: oldTime, newRollout: newTime} {
+	staleChat, freshChat := now.Add(-9*time.Minute), now.Add(-4*time.Minute)
+	for file, stamp := range map[string]time.Time{
+		waitFile: waitTime, oldRollout: oldTime, newRollout: newTime,
+		chatStore: staleChat, chatWAL: freshChat,
+	} {
 		if err := os.Chtimes(file, stamp, stamp); err != nil {
 			t.Fatal(err)
 		}
 	}
-	runner := &fakeRunner{available: map[string]bool{"claude": true, "codex": true, "lsof": true}}
+	runner := &fakeRunner{
+		available: map[string]bool{"claude": true, "codex": true, "cursor-agent": true, "lsof": true},
+		paths:     map[string]string{"cursor-agent": cursorLauncher},
+	}
 	runner.handle = func(command Command) (string, error) {
 		joined := command.Name + " " + strings.Join(command.Args, " ")
 		switch {
@@ -121,14 +168,20 @@ func TestProvidersAndAggregation(t *testing.T) {
 ]`, nil
 		case joined == "ps -Ao pid=,ppid=,tty=,comm=":
 			return "100 1 ttys001 claude\n101 1 ttys002 claude\n" +
-				"200 1 ttys003 /mock/codex\n201 200 ttys003 codex\n206 1 ttys003 codex\n202 1 ttys004 codex\n203 1 ttys004 codex-helper\n", nil
+				"200 1 ttys003 /mock/codex\n201 200 ttys003 codex\n206 1 ttys003 codex\n202 1 ttys004 codex\n203 1 ttys004 codex-helper\n" +
+				"300 1 ttys005 " + cursorLauncher + "\n" +
+				"301 300 ttys005 " + cursorInstall + "/node\n" +
+				"302 301 ttys005 " + cursorInstall + "/node\n", nil
 		case strings.HasPrefix(joined, "tmux list-panes"):
 			return "/dev/ttys001\t%1\twork\twork:1.1\t/tmp/ignored\n" +
 				"/dev/ttys002\t%2\tclaude-two\tclaude-two:1.1\t/tmp/ignored\n" +
 				"/dev/ttys003\t%3\tcodex-three\tcodex-three:1.1\t" + home + "/Project With Spaces\n" +
-				"/dev/ttys004\t%4\twork\twork:2.1\t/tmp/loose path\n", nil
-		case joined == "lsof -a -p 200,202 -Fn":
-			return "p200\nn" + oldRollout + "\nn" + newRollout + "\np202\n", nil
+				"/dev/ttys004\t%4\twork\twork:2.1\t/tmp/loose path\n" +
+				"/dev/ttys005\t%5\tcursor-five\tcursor-five:1.1\t/tmp/cursor path\n", nil
+		case joined == "lsof -a -p 200,201,202 -Fn":
+			return "p200\nn" + oldRollout + "\np201\nn" + newRollout + "\np202\n", nil
+		case joined == "lsof -a -p 300,301,302 -Fn":
+			return "p300\nn" + chatStore + "\np301\nn" + chatWAL + "\np302\nn" + filepath.Join(home, ".cursor", "chats", "unopened.log") + "\n", nil
 		case strings.HasPrefix(joined, "lsof "):
 			return "", nil
 		case strings.HasPrefix(joined, "tmux show-option"):
@@ -146,7 +199,7 @@ func TestProvidersAndAggregation(t *testing.T) {
 	if got := countCommandPrefix(commands, "tmux", "list-panes -a"); got != 1 {
 		t.Fatalf("pane inventory ran %d times, want 1:\n%s", got, commandLines(commands))
 	}
-	if len(agents) != 4 {
+	if len(agents) != 5 {
 		t.Fatalf("got %d agents: %#v", len(agents), agents)
 	}
 	if agents[0].Provider != "claude" || agents[0].State != "waiting" || agents[0].Activity.Unix() != waitTime.Unix() {
@@ -155,8 +208,10 @@ func TestProvidersAndAggregation(t *testing.T) {
 	assertAgent(t, agents, Agent{Provider: "claude", Pane: "%2", PID: 101, State: "working", Location: "claude-two:1.1", Path: "~"})
 	assertAgent(t, agents, Agent{Provider: "codex", Pane: "%3", PID: 200, State: "running", Location: "codex-three:1.1", Path: "~/Project With Spaces", Activity: newTime})
 	assertAgent(t, agents, Agent{Provider: "codex", Pane: "%4", PID: 202, State: "running", Location: "work:2.1", Path: "/tmp/loose path"})
+	assertAgent(t, agents, Agent{Provider: "cursor", Pane: "%5", PID: 300, State: "running", Location: "cursor-five:1.1", Path: "/tmp/cursor path", Activity: freshChat})
 	rows := app.Rows(context.Background(), "all")
-	if !strings.Contains(rows, "\tclaude\twaiting\t   1m\t") || !strings.Contains(rows, "\tcodex\trunning\t   2m\t") {
+	if !strings.Contains(rows, "\tclaude\twaiting\t   1m\t") || !strings.Contains(rows, "\tcodex\trunning\t   2m\t") ||
+		!strings.Contains(rows, "\tcursor\trunning\t   4m\t") {
 		t.Fatalf("unexpected formatted rows:\n%s", rows)
 	}
 }
@@ -256,6 +311,145 @@ func TestCodexBatchesLsofAndKeepsPartialOutput(t *testing.T) {
 	assertAgent(t, agents, Agent{Provider: "codex", Pane: "%2", PID: 20, State: "running", Activity: twoTime, Location: "two:1.1", Path: "/tmp/two"})
 	if got := countCommand(runner.Commands(), "lsof", "-a -p 10,20 -Fn"); got != 1 {
 		t.Fatalf("lsof ran %d times, want one batch:\n%s", got, commandLines(runner.Commands()))
+	}
+}
+
+func TestCursorIdentifiesSessionLeaders(t *testing.T) {
+	home := t.TempDir()
+	configHome := filepath.Join(home, "Cursor Config")
+	t.Setenv("CURSOR_CONFIG_DIR", configHome)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	launcher, install := installCursor(t, home, "agent")
+	chat := filepath.Join(configHome, "chats", "hash", "chat-id", "store.db-wal")
+	if err := os.MkdirAll(filepath.Dir(chat), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(chat, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 8, 11, 12, 0, 0, 0, time.UTC)
+	chatTime := now.Add(-5 * time.Minute)
+	if err := os.Chtimes(chat, chatTime, chatTime); err != nil {
+		t.Fatal(err)
+	}
+	runner := &fakeRunner{
+		available: map[string]bool{"cursor-agent": true, "lsof": true},
+		paths:     map[string]string{"cursor-agent": launcher},
+	}
+	runner.handle = func(command Command) (string, error) {
+		joined := command.Name + " " + strings.Join(command.Args, " ")
+		switch {
+		case joined == "ps -Ao pid=,ppid=,tty=,comm=":
+			return "10 1 ttys001 /usr/local/bin/agent\n" +
+				"400 9 ttys002 " + launcher + "\n" +
+				"401 400 ttys002 " + install + "/node\n" +
+				"500 1 ttys003 " + launcher + "\n" +
+				"600 1 ttys004 " + install + "/node\n" +
+				"700 1 ttys005 " + launcher + "\n" +
+				"701 700 ttys006 " + install + "/node\n", nil
+		case strings.HasPrefix(joined, "tmux list-panes"):
+			return "/dev/ttys001\t%1\tstray\tstray:1.1\t/tmp/stray\n" +
+				"/dev/ttys002\t%2\tcursor\tcursor:1.1\t/tmp/cursor\n" +
+				"/dev/ttys004\t%4\thelper only\thelper:1.1\t/tmp/helper\n" +
+				"/dev/ttys006\t%6\tdetached child\tdetached:1.1\t/tmp/detached\n", nil
+		case joined == "lsof -a -p 400,401,600,701 -Fn":
+			return "p400\np401\nn" + chat + "\np600\np701\n", nil
+		}
+		return "", nil
+	}
+	app := newTestApp(runner, &fakeClock{now: now}, home)
+	agents := app.Agents(context.Background(), "cursor")
+	if len(agents) != 3 {
+		t.Fatalf("got %d agents, want the three paned sessions: %#v", len(agents), agents)
+	}
+	assertAgent(t, agents, Agent{Provider: "cursor", Pane: "%2", PID: 400, State: "running", Location: "cursor:1.1", Path: "/tmp/cursor", Activity: chatTime})
+	assertAgent(t, agents, Agent{Provider: "cursor", Pane: "%4", PID: 600, State: "running", Location: "helper:1.1", Path: "/tmp/helper"})
+	assertAgent(t, agents, Agent{Provider: "cursor", Pane: "%6", PID: 701, State: "running", Location: "detached:1.1", Path: "/tmp/detached"})
+}
+
+func TestCursorChatsDirPrecedence(t *testing.T) {
+	home := t.TempDir()
+	config := filepath.Join(home, "config")
+	xdg := filepath.Join(home, "xdg")
+	tests := []struct {
+		name   string
+		config string
+		xdg    string
+		want   string
+	}{
+		{name: "config", config: " " + config + " ", xdg: xdg, want: filepath.Join(config, "chats")},
+		{name: "xdg", xdg: xdg, want: filepath.Join(xdg, "cursor", "chats")},
+		{name: "home", want: filepath.Join(home, ".cursor", "chats")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("CURSOR_CONFIG_DIR", tt.config)
+			t.Setenv("XDG_CONFIG_HOME", tt.xdg)
+			t.Setenv("CURSOR_DATA_DIR", filepath.Join(home, "ignored-data"))
+			if got := cursorChatsDir(home); got != tt.want {
+				t.Fatalf("cursor chats directory: got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCursorHonorsProcessNameOption(t *testing.T) {
+	home := t.TempDir()
+	launcher, _ := installCursor(t, home, "cursor")
+	runner := &fakeRunner{
+		available: map[string]bool{launcher: true},
+		paths:     map[string]string{launcher: launcher},
+	}
+	runner.handle = func(command Command) (string, error) {
+		joined := command.Name + " " + strings.Join(command.Args, " ")
+		switch {
+		case joined == "tmux show-option -gqv @cursor_agent_process_name":
+			return launcher, nil
+		case joined == "ps -Ao pid=,ppid=,tty=,comm=":
+			return "800 1 ttys001 " + launcher + "\n", nil
+		case strings.HasPrefix(joined, "tmux list-panes"):
+			return "/dev/ttys001\t%1\trenamed\trenamed:1.1\t/tmp/renamed\n", nil
+		}
+		return "", nil
+	}
+	app := newTestApp(runner, &fakeClock{now: time.Now()}, home)
+	agents := app.Agents(context.Background(), "cursor")
+	if len(agents) != 1 {
+		t.Fatalf("got %d agents, want the renamed launcher: %#v", len(agents), agents)
+	}
+	assertAgent(t, agents, Agent{Provider: "cursor", Pane: "%1", PID: 800, State: "running", Location: "renamed:1.1", Path: "/tmp/renamed"})
+}
+
+func TestCursorIgnoresUnrelatedProcessesNamedAgent(t *testing.T) {
+	home := t.TempDir()
+	launcher, _ := installCursor(t, home, "agent")
+	stray := filepath.Join(home, "bin", "agent")
+	if err := os.MkdirAll(filepath.Dir(stray), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stray, nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runner := &fakeRunner{
+		available: map[string]bool{"cursor-agent": true},
+		paths:     map[string]string{"cursor-agent": launcher},
+	}
+	runner.handle = func(command Command) (string, error) {
+		joined := command.Name + " " + strings.Join(command.Args, " ")
+		switch {
+		case joined == "ps -Ao pid=,ppid=,tty=,comm=":
+			return "900 1 ttys001 " + stray + "\n901 1 ttys002 /missing/bin/agent\n" +
+				"902 1 ttys003 /tmp/cursor-agent/versions/old/node\n", nil
+		case strings.HasPrefix(joined, "tmux list-panes"):
+			return "/dev/ttys001\t%1\tstray\tstray:1.1\t/tmp/stray\n" +
+				"/dev/ttys002\t%2\tgone\tgone:1.1\t/tmp/gone\n" +
+				"/dev/ttys003\t%3\tunrelated\tunrelated:1.1\t/tmp/unrelated\n", nil
+		}
+		return "", nil
+	}
+	app := newTestApp(runner, &fakeClock{now: time.Now()}, home)
+	if agents := app.Agents(context.Background(), "cursor"); len(agents) != 0 {
+		t.Fatalf("processes outside a Cursor installation were reported: %#v", agents)
 	}
 }
 
@@ -389,10 +583,10 @@ func terminalFieldStarts(fields []string) []int {
 func TestCLICommandsAndProviders(t *testing.T) {
 	for _, command := range []string{"popup", "select", "list"} {
 		for _, dash := range []string{"-provider", "--provider"} {
-			for _, provider := range []string{"all", "claude", "codex"} {
+			for _, provider := range []string{"all", "claude", "codex", "cursor"} {
 				name := command + "/" + dash + "/" + provider
 				t.Run(name, func(t *testing.T) {
-					runner := &fakeRunner{available: map[string]bool{"tmux": true, "fzf": true, "claude": true, "codex": true}}
+					runner := &fakeRunner{available: map[string]bool{"tmux": true, "fzf": true, "claude": true, "codex": true, "cursor-agent": true}}
 					runner.handle = func(command Command) (string, error) {
 						out, _ := fakeAgentResponse(command)
 						return out, nil
@@ -422,9 +616,11 @@ func TestCLICommandsAndProviders(t *testing.T) {
 					case "list":
 						wantClaude := provider == "all" || provider == "claude"
 						wantCodex := provider == "all" || provider == "codex"
+						wantCursor := provider == "all" || provider == "cursor"
 						if strings.Contains(calls, "claude agents --json") != wantClaude ||
 							!strings.Contains(calls, "ps -Ao pid=,ppid=,tty=,comm=") ||
-							strings.Contains(calls, "@codex_agent_process_name") != wantCodex {
+							strings.Contains(calls, "@codex_agent_process_name") != wantCodex ||
+							strings.Contains(calls, "@cursor_agent_process_name") != wantCursor {
 							t.Fatalf("list was not dispatched with provider %q:\n%s", provider, calls)
 						}
 					}
@@ -823,12 +1019,13 @@ func TestEmptySelectClosesFZFAndMessagesOriginatingClient(t *testing.T) {
 		{provider: "all", message: "agent-picker: no running agents found"},
 		{provider: "claude", message: "agent-picker: no running Claude agents found"},
 		{provider: "codex", message: "agent-picker: no running Codex agents found"},
+		{provider: "cursor", message: "agent-picker: no running Cursor agents found"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.provider, func(t *testing.T) {
 			t.Setenv("AGENT_PICKER_CLIENT", "origin-client")
 			runner := &fakeRunner{available: map[string]bool{
-				"tmux": true, "fzf": true, "claude": true, "codex": true,
+				"tmux": true, "fzf": true, "claude": true, "codex": true, "cursor-agent": true,
 			}}
 			runner.handle = func(command Command) (string, error) {
 				if command.Name == "claude" {

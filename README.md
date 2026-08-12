@@ -24,10 +24,10 @@ artifact and is not committed.
 
 `prefix Space` opens the project sessionizer.
 
-`prefix u` opens one picker for running Claude Code and Codex TUI panes. It
-shows each provider, status, activity age, tmux location, working path, and a
-live pane preview. Press `enter` to jump to an agent or `ctrl-x` to terminate
-its process and reload the list.
+`prefix u` opens one picker for running Claude Code, Codex, and Cursor TUI
+panes. It shows each provider, status, activity age, tmux location, working
+path, and a live pane preview. Press `enter` to jump to an agent or `ctrl-x` to
+terminate its process and reload the list.
 
 Claude reports detailed `waiting`, `idle`, and `working` states through
 `claude agents --json`. Codex is detected passively by joining exact `codex`
@@ -35,10 +35,23 @@ processes to tmux panes through their TTYs, so its conservative status is always
 `running`. Its age comes from the newest open
 `$CODEX_HOME/sessions/**/rollout-*.jsonl` when `lsof` is available.
 
+Cursor is detected passively as well, and its status is always `running` too.
+Its launcher replaces `argv[0]` with the invoked path, usually a link such as
+`~/.local/bin/agent`, so a process belongs to Cursor when that path resolves
+into the Cursor installation root. The same test covers the bundled `node`
+processes a session spawns, and among the matching processes sharing a TTY the
+picker reports the topmost one, which is the session leader `ctrl-x` must
+terminate. Its age comes from the newest open `store.db*` under the Cursor
+configuration directory's `chats` directory when `lsof` is available. The
+configuration directory is resolved from `CURSOR_CONFIG_DIR`, then
+`$XDG_CONFIG_HOME/cursor`, then `~/.cursor`.
+
 Only tmux 3.2 or newer and `fzf` are required at runtime. Claude Code enables
-the Claude provider; Codex enables the Codex provider; and `lsof` adds Codex
-activity ages. Claude JSON is decoded directly, so `jq` is no longer required.
-A missing optional command disables only that provider or metadata.
+the Claude provider; Codex enables the Codex provider; the launcher named by
+`@cursor_agent_process_name` enables the Cursor provider (default:
+`cursor-agent`); and `lsof` adds Codex and Cursor activity ages. Claude JSON is
+decoded directly, so `jq` is no longer required. A missing optional command
+disables only that provider or metadata.
 
 The popup and `fzf` frame appear immediately while agent discovery runs. When
 no running agents match the selected provider, the empty picker closes and a
@@ -49,9 +62,9 @@ empty result.
 The command requires an explicit action and accepts an optional provider:
 
 ```text
-agent-picker popup [-provider all|claude|codex] [TMUX_CLIENT]
-agent-picker select [-provider all|claude|codex]
-agent-picker list [-provider all|claude|codex]
+agent-picker popup [-provider all|claude|codex|cursor] [TMUX_CLIENT]
+agent-picker select [-provider all|claude|codex|cursor]
+agent-picker list [-provider all|claude|codex|cursor]
 ```
 
 Both `-provider` and `--provider` are accepted.
@@ -64,7 +77,14 @@ set -g @agent_popup_width       '90%'
 set -g @agent_popup_height      '90%'
 set -g @agent_fzf_options       ''
 set -g @codex_agent_process_name 'codex'
+set -g @cursor_agent_process_name 'cursor-agent'
 ```
+
+`@cursor_agent_process_name` is the launcher the picker looks up on `PATH` and
+accepts as a Cursor process name. It defaults to `cursor-agent`; `agent`,
+`cursor-agent`, and the configured launcher's base name are recognized. A
+process using one of those names is still only reported once its path resolves
+into the Cursor installation root.
 
 Selecting an agent focuses its tmux session, window, and pane in place.
 

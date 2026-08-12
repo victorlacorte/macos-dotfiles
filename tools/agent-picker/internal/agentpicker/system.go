@@ -27,6 +27,7 @@ type Runner interface {
 type FileSystem interface {
 	Glob(string) ([]string, error)
 	Stat(string) (os.FileInfo, error)
+	EvalSymlinks(string) (string, error)
 }
 
 type Clock interface {
@@ -64,6 +65,9 @@ type OSFileSystem struct{}
 
 func (OSFileSystem) Glob(pattern string) ([]string, error) { return filepath.Glob(pattern) }
 func (OSFileSystem) Stat(name string) (os.FileInfo, error) { return os.Stat(name) }
+func (OSFileSystem) EvalSymlinks(name string) (string, error) {
+	return filepath.EvalSymlinks(name)
+}
 
 type RealClock struct{}
 

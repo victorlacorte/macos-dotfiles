@@ -32,10 +32,8 @@ func (a *App) Select(ctx context.Context, provider string) {
 		return
 	}
 	header := "Agents: enter jump, ctrl-x terminate"
-	if provider == "claude" {
-		header = "Claude agents: enter jump, ctrl-x terminate"
-	} else if provider == "codex" {
-		header = "Codex agents: enter jump, ctrl-x terminate"
+	if label := providerLabel(provider); label != "" {
+		header = label + " agents: enter jump, ctrl-x terminate"
 	}
 	args := []string{
 		"--delimiter=\\t", "--with-nth=2,5,6,7,8", "--reverse", "--cycle",

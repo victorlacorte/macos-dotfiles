@@ -39,7 +39,8 @@ func runHelper(name string, args []string) {
 		}
 	case "ps":
 		if strings.Contains(joined, "ppid=") {
-			_, _ = os.Stdout.WriteString("100 1 ttys001 claude\n200 1 ttys002 codex\n")
+			_, _ = os.Stdout.WriteString("100 1 ttys001 claude\n200 1 ttys002 codex\n" +
+				"300 1 ttys003 " + os.Getenv("AGENT_PICKER_TEST_CURSOR_PROCESS") + "\n")
 		}
 	case "claude":
 		_, _ = os.Stdout.WriteString(os.Getenv("AGENT_PICKER_TEST_CLAUDE_JSON"))
@@ -48,7 +49,7 @@ func runHelper(name string, args []string) {
 	case "jq":
 		_, _ = os.Stderr.WriteString("jq must not be called\n")
 		os.Exit(9)
-	case "codex", "fzf":
+	case "codex", "cursor-agent", "fzf":
 		return
 	}
 }
@@ -89,12 +90,28 @@ func TestListBlackBoxWithProviderAliases(t *testing.T) {
 	binary := filepath.Join(tmp, "agent-picker")
 	buildPicker(t, binary, filepath.Join(tmp, "go-cache"))
 	aliasTools(t, tmp, "tmux", "fzf", "ps", "lsof", "jq", "claude", "codex")
+	cursorVersion := filepath.Join(tmp, "share", "cursor-agent", "versions", "x")
+	cursorBinary := filepath.Join(cursorVersion, "cursor-agent")
+	if err := os.MkdirAll(cursorVersion, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cursorBinary, nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(cursorBinary, filepath.Join(tmp, "cursor-agent")); err != nil {
+		t.Fatal(err)
+	}
+	resolvedCursorVersion, err := filepath.EvalSymlinks(cursorVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	claudeHome := filepath.Join(tmp, "claude home")
 	codexHome := filepath.Join(tmp, "codex home")
 	transcript := filepath.Join(claudeHome, "projects", "project", "session-id.jsonl")
 	rollout := filepath.Join(codexHome, "sessions", "2026", "rollout-test.jsonl")
-	for _, file := range []string{transcript, rollout} {
+	chat := filepath.Join(tmp, ".cursor", "chats", "hash", "chat-id", "store.db-wal")
+	for _, file := range []string{transcript, rollout, chat} {
 		if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -106,17 +123,22 @@ func TestListBlackBoxWithProviderAliases(t *testing.T) {
 	command.Env = append(os.Environ(),
 		"PATH="+tmp+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"HOME="+tmp, "CLAUDE_CONFIG_DIR="+claudeHome, "CODEX_HOME="+codexHome,
+		"CURSOR_CONFIG_DIR="+filepath.Join(tmp, ".cursor"),
 		"AGENT_PICKER_TEST_HELPER=1",
-		"AGENT_PICKER_TEST_PANES=/dev/ttys001\t%1\twork\twork:1.1\t/tmp/Claude Path\n/dev/ttys002\t%2\tcodex-two\tcodex-two:1.1\t/tmp/Codex Path\n",
+		"AGENT_PICKER_TEST_PANES=/dev/ttys001\t%1\twork\twork:1.1\t/tmp/Claude Path\n/dev/ttys002\t%2\tcodex-two\tcodex-two:1.1\t/tmp/Codex Path\n/dev/ttys003\t%3\tcursor-three\tcursor-three:1.1\t/tmp/Cursor Path\n",
 		`AGENT_PICKER_TEST_CLAUDE_JSON=[{"pid":100,"status":"waiting","sessionId":"session-id","cwd":"/tmp/Claude Path","kind":"interactive"}]`,
-		"AGENT_PICKER_TEST_LSOF=p200\nn"+rollout+"\n",
+		"AGENT_PICKER_TEST_LSOF=p200\nn"+rollout+"\np300\nn"+chat+"\n",
+		"AGENT_PICKER_TEST_CURSOR_PROCESS="+filepath.Join(resolvedCursorVersion, "node"),
 	)
 	output, err := command.CombinedOutput()
 	if err != nil {
 		t.Fatalf("run list: %v\n%s", err, output)
 	}
 	rows := string(output)
-	for _, want := range []string{"\tclaude\twaiting\t", "\tcodex\trunning\t", "/tmp/Claude Path", "/tmp/Codex Path"} {
+	for _, want := range []string{
+		"\tclaude\twaiting\t", "\tcodex\trunning\t", "\tcursor\trunning\t   0m\t",
+		"/tmp/Claude Path", "/tmp/Codex Path", "/tmp/Cursor Path",
+	} {
 		if !strings.Contains(rows, want) {
 			t.Fatalf("missing %q in black-box rows:\n%s", want, rows)
 		}
