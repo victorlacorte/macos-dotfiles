@@ -5,9 +5,10 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"strings"
 )
 
-const providerUsage = "all|claude|codex"
+var providerUsage = strings.Join(append([]string{"all"}, providerNames()...), "|")
 
 func (a *App) Main(ctx context.Context, args []string) int {
 	if len(args) == 0 {
@@ -72,22 +73,22 @@ func (a *App) Main(ctx context.Context, args []string) int {
 }
 
 func validProvider(provider string) bool {
-	return provider == "all" || provider == "claude" || provider == "codex"
+	return provider == "all" || providerLabel(provider) != ""
 }
 
 func (a *App) printUsage() {
 	fmt.Fprintln(a.Stderr, "Usage:")
-	fmt.Fprintln(a.Stderr, "  agent-picker popup [-provider all|claude|codex] [TMUX_CLIENT]")
-	fmt.Fprintln(a.Stderr, "  agent-picker select [-provider all|claude|codex]")
-	fmt.Fprintln(a.Stderr, "  agent-picker list [-provider all|claude|codex]")
+	fmt.Fprintf(a.Stderr, "  agent-picker popup [-provider %s] [TMUX_CLIENT]\n", providerUsage)
+	fmt.Fprintf(a.Stderr, "  agent-picker select [-provider %s]\n", providerUsage)
+	fmt.Fprintf(a.Stderr, "  agent-picker list [-provider %s]\n", providerUsage)
 }
 
 func (a *App) printCommandUsage(command string, flags *flag.FlagSet) {
 	switch command {
 	case "popup":
-		fmt.Fprintln(a.Stderr, "Usage: agent-picker popup [-provider all|claude|codex] [TMUX_CLIENT]")
+		fmt.Fprintf(a.Stderr, "Usage: agent-picker popup [-provider %s] [TMUX_CLIENT]\n", providerUsage)
 	default:
-		fmt.Fprintf(a.Stderr, "Usage: agent-picker %s [-provider all|claude|codex]\n", command)
+		fmt.Fprintf(a.Stderr, "Usage: agent-picker %s [-provider %s]\n", command, providerUsage)
 	}
 	flags.PrintDefaults()
 }

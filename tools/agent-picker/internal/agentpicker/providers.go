@@ -108,6 +108,50 @@ func (a *App) transcriptMTime(config, sessionID string) time.Time {
 	return time.Time{}
 }
 
+// passiveSessions elects the topmost matching process on each pane's tty and
+// maps every matching process in that session to its elected leader.
+func passiveSessions(inventory *discoveryInventory, matches func(process) bool) (leaders map[string]process, owners map[int]int) {
+	leaders = make(map[string]process)
+	owners = make(map[int]int)
+	matched := make(map[int]process)
+	for pid, process := range inventory.processes {
+		if matches(process) {
+			matched[pid] = process
+		}
+	}
+
+	roots := make(map[int]process)
+	for pid, process := range matched {
+		if _, ok := inventory.panes[process.tty]; !ok {
+			continue
+		}
+		root := passiveSessionLeader(process, matched)
+		roots[pid] = root
+		current, ok := leaders[root.tty]
+		if !ok || root.pid < current.pid {
+			leaders[root.tty] = root
+		}
+	}
+	for pid, root := range roots {
+		if leader, ok := leaders[root.tty]; ok && leader.pid == root.pid {
+			owners[pid] = leader.pid
+		}
+	}
+	return leaders, owners
+}
+
+func passiveSessionLeader(start process, matched map[int]process) process {
+	leader := start
+	for depth := 0; depth < len(matched); depth++ {
+		parent, ok := matched[leader.ppid]
+		if !ok || parent.tty != leader.tty {
+			break
+		}
+		leader = parent
+	}
+	return leader
+}
+
 func (a *App) collectCodexAgents(ctx context.Context, inventory *discoveryInventory) []Agent {
 	processName := a.option(ctx, "@codex_agent_process_name", "codex")
 	_, lookupErr := a.Runner.LookPath(processName)
@@ -117,39 +161,28 @@ func (a *App) collectCodexAgents(ctx context.Context, inventory *discoveryInvent
 	}
 
 	base := filepath.Base(processName)
-	processes := make(map[int]process)
-	for pid, process := range inventory.processes {
-		if filepath.Base(process.command) == base {
-			processes[pid] = process
-		}
-	}
-	chosen := make(map[string]process)
-	for _, process := range processes {
-		if _, ok := inventory.panes[process.tty]; !ok {
-			continue
-		}
-		if parent, ok := processes[process.ppid]; ok && parent.tty == process.tty {
-			continue
-		}
-		current, ok := chosen[process.tty]
-		if !ok || process.pid < current.pid {
-			chosen[process.tty] = process
-		}
-	}
-	ttys := make([]string, 0, len(chosen))
-	for tty := range chosen {
+	leaders, owners := passiveSessions(inventory, func(process process) bool {
+		return filepath.Base(process.command) == base
+	})
+	ttys := make([]string, 0, len(leaders))
+	for tty := range leaders {
 		ttys = append(ttys, tty)
 	}
 	sort.Strings(ttys)
-	pids := make([]int, 0, len(ttys))
-	for _, tty := range ttys {
-		pids = append(pids, chosen[tty].pid)
-	}
-	activity := a.codexRolloutMTimes(ctx, pids)
+	activity := a.openFileMTimes(ctx, owners, func(path string) bool {
+		base := getenv("CODEX_HOME")
+		if base == "" {
+			base = filepath.Join(a.Home, ".codex")
+		}
+		sessions := filepath.Clean(filepath.Join(base, "sessions")) + string(filepath.Separator)
+		name := filepath.Base(path)
+		return strings.HasPrefix(path, sessions) &&
+			strings.HasPrefix(name, "rollout-") && filepath.Ext(name) == ".jsonl"
+	})
 
 	agents := make([]Agent, 0, len(ttys))
 	for _, tty := range ttys {
-		process, pane := chosen[tty], inventory.panes[tty]
+		process, pane := leaders[tty], inventory.panes[tty]
 		agents = append(agents, Agent{
 			Provider: "codex", Pane: pane.ID, PID: process.pid,
 			State: "running", Activity: activity[process.pid],
@@ -159,13 +192,17 @@ func (a *App) collectCodexAgents(ctx context.Context, inventory *discoveryInvent
 	return agents
 }
 
-func (a *App) codexRolloutMTimes(ctx context.Context, pids []int) map[int]time.Time {
+func (a *App) openFileMTimes(ctx context.Context, owners map[int]int, accept func(string) bool) map[int]time.Time {
 	activity := make(map[int]time.Time)
-	if len(pids) == 0 {
+	if len(owners) == 0 {
 		return activity
 	}
 	if _, err := a.Runner.LookPath("lsof"); err != nil {
 		return activity
+	}
+	pids := make([]int, 0, len(owners))
+	for pid := range owners {
+		pids = append(pids, pid)
 	}
 	sortedPIDs := append([]int(nil), pids...)
 	sort.Ints(sortedPIDs)
@@ -175,31 +212,125 @@ func (a *App) codexRolloutMTimes(ctx context.Context, pids []int) map[int]time.T
 	}
 	out, _ := a.run(ctx, "lsof", "-a", "-p", strings.Join(values, ","), "-Fn")
 
-	base := getenv("CODEX_HOME")
-	if base == "" {
-		base = filepath.Join(a.Home, ".codex")
-	}
-	sessions := filepath.Clean(filepath.Join(base, "sessions")) + string(filepath.Separator)
 	currentPID := 0
 	for _, line := range strings.Split(out, "\n") {
 		if strings.HasPrefix(line, "p") {
 			currentPID, _ = strconv.Atoi(strings.TrimPrefix(line, "p"))
 			continue
 		}
-		if currentPID == 0 || !strings.HasPrefix(line, "n"+sessions) {
+		if currentPID == 0 || !strings.HasPrefix(line, "n") {
 			continue
 		}
 		path := strings.TrimPrefix(line, "n")
-		name := filepath.Base(path)
-		if !strings.HasPrefix(name, "rollout-") || filepath.Ext(name) != ".jsonl" {
+		if !accept(path) {
 			continue
 		}
 		info, err := a.FS.Stat(path)
-		if err == nil && info.ModTime().After(activity[currentPID]) {
-			activity[currentPID] = info.ModTime()
+		if err != nil || info.IsDir() {
+			continue
+		}
+		leaderPID, ok := owners[currentPID]
+		if ok && info.ModTime().After(activity[leaderPID]) {
+			activity[leaderPID] = info.ModTime()
 		}
 	}
 	return activity
+}
+
+// Cursor CLI processes are identified by their installation directory. Their
+// launcher replaces argv[0] with the invoked path, so the reported command is
+// usually a link such as ~/.local/bin/agent, and the bundled executable is a
+// plain "node".
+func (a *App) collectCursorAgents(ctx context.Context, inventory *discoveryInventory) []Agent {
+	processName := a.option(ctx, "@cursor_agent_process_name", "cursor-agent")
+	installed, lookupErr := a.Runner.LookPath(processName)
+	inventory.wg.Wait()
+	if lookupErr != nil {
+		return nil
+	}
+	if resolved, err := a.FS.EvalSymlinks(installed); err == nil {
+		installed = resolved
+	}
+
+	cursor := &cursorInstall{
+		fs:     a.FS,
+		binary: installed,
+		root:   cursorInstallRoot(installed),
+		launchers: map[string]bool{
+			"agent": true, "cursor-agent": true, filepath.Base(processName): true,
+		},
+		resolved: make(map[string]bool),
+	}
+	leaders, owners := passiveSessions(inventory, func(process process) bool {
+		return cursor.matches(process.command)
+	})
+	ttys := make([]string, 0, len(leaders))
+	for tty := range leaders {
+		ttys = append(ttys, tty)
+	}
+	sort.Strings(ttys)
+	chatDir := filepath.Clean(cursorChatsDir(a.Home)) + string(filepath.Separator)
+	activity := a.openFileMTimes(ctx, owners, func(path string) bool {
+		return strings.HasPrefix(path, chatDir) &&
+			strings.HasPrefix(filepath.Base(path), "store.db")
+	})
+
+	agents := make([]Agent, 0, len(ttys))
+	for _, tty := range ttys {
+		process, pane := leaders[tty], inventory.panes[tty]
+		agents = append(agents, Agent{
+			Provider: "cursor", Pane: pane.ID, PID: process.pid,
+			State: "running", Activity: activity[process.pid],
+			Location: pane.Location, Path: shortenHome(pane.Path, a.Home),
+		})
+	}
+	return agents
+}
+
+// cursorInstallRoot returns the directory holding every installed version, so
+// that sessions started before an upgrade still match.
+func cursorInstallRoot(binary string) string {
+	for dir := filepath.Dir(binary); dir != "/" && dir != "."; dir = filepath.Dir(dir) {
+		if filepath.Base(dir) == "cursor-agent" {
+			return dir + string(filepath.Separator)
+		}
+	}
+	return ""
+}
+
+type cursorInstall struct {
+	fs        FileSystem
+	binary    string
+	root      string
+	launchers map[string]bool
+	resolved  map[string]bool
+}
+
+func (c *cursorInstall) matches(command string) bool {
+	if c.root != "" && strings.HasPrefix(command, c.root) {
+		return true
+	}
+	if !c.launchers[filepath.Base(command)] {
+		return false
+	}
+	if inside, ok := c.resolved[command]; ok {
+		return inside
+	}
+	real, err := c.fs.EvalSymlinks(command)
+	inside := err == nil && real == c.binary
+	c.resolved[command] = inside
+	return inside
+}
+
+// The Cursor CLI keeps chat databases under its configuration directory.
+func cursorChatsDir(home string) string {
+	if dir := strings.TrimSpace(getenv("CURSOR_CONFIG_DIR")); dir != "" {
+		return filepath.Join(dir, "chats")
+	}
+	if xdg := strings.TrimSpace(getenv("XDG_CONFIG_HOME")); xdg != "" {
+		return filepath.Join(xdg, "cursor", "chats")
+	}
+	return filepath.Join(home, ".cursor", "chats")
 }
 
 func (a *App) panes(ctx context.Context) map[string]pane {

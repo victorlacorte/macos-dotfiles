@@ -13,6 +13,35 @@ type agentSnapshot struct {
 	now    time.Time
 }
 
+type providerAdapter struct {
+	name    string
+	label   string
+	collect func(*App, context.Context, *discoveryInventory) []Agent
+}
+
+var providerAdapters = []providerAdapter{
+	{name: "claude", label: "Claude", collect: (*App).collectClaudeAgents},
+	{name: "codex", label: "Codex", collect: (*App).collectCodexAgents},
+	{name: "cursor", label: "Cursor", collect: (*App).collectCursorAgents},
+}
+
+func providerNames() []string {
+	names := make([]string, 0, len(providerAdapters))
+	for _, adapter := range providerAdapters {
+		names = append(names, adapter.name)
+	}
+	return names
+}
+
+func providerAdapterFor(name string) (providerAdapter, bool) {
+	for _, adapter := range providerAdapters {
+		if adapter.name == name {
+			return adapter, true
+		}
+	}
+	return providerAdapter{}, false
+}
+
 func (a *App) snapshot(ctx context.Context, provider string) agentSnapshot {
 	now := a.Clock.Now()
 	agents := a.collectAgents(ctx, provider)
@@ -33,26 +62,27 @@ func (a *App) Agents(ctx context.Context, provider string) []Agent {
 }
 
 func (a *App) collectAgents(ctx context.Context, provider string) []Agent {
-	var collectors []func(context.Context, *discoveryInventory) []Agent
+	var adapters []providerAdapter
 	switch provider {
 	case "all":
-		collectors = []func(context.Context, *discoveryInventory) []Agent{a.collectClaudeAgents, a.collectCodexAgents}
-	case "claude":
-		collectors = []func(context.Context, *discoveryInventory) []Agent{a.collectClaudeAgents}
-	case "codex":
-		collectors = []func(context.Context, *discoveryInventory) []Agent{a.collectCodexAgents}
+		adapters = providerAdapters
 	default:
+		if adapter, ok := providerAdapterFor(provider); ok {
+			adapters = []providerAdapter{adapter}
+		}
+	}
+	if len(adapters) == 0 {
 		return nil
 	}
 	inventory := a.startInventory(ctx)
-	results := make([][]Agent, len(collectors))
+	results := make([][]Agent, len(adapters))
 	var wg sync.WaitGroup
-	wg.Add(len(collectors))
-	for i, collector := range collectors {
-		go func() {
+	wg.Add(len(adapters))
+	for i, adapter := range adapters {
+		go func(i int, adapter providerAdapter) {
 			defer wg.Done()
-			results[i] = collector(ctx, inventory)
-		}()
+			results[i] = adapter.collect(a, ctx, inventory)
+		}(i, adapter)
 	}
 	wg.Wait()
 	inventory.wg.Wait()
@@ -71,13 +101,16 @@ func (a *App) List(ctx context.Context, provider string) {
 	fmt.Fprint(a.Stdout, a.Rows(ctx, provider))
 }
 
-func noAgentsMessage(provider string) string {
-	switch provider {
-	case "claude":
-		return "agent-picker: no running Claude agents found"
-	case "codex":
-		return "agent-picker: no running Codex agents found"
-	default:
-		return "agent-picker: no running agents found"
+func providerLabel(provider string) string {
+	if adapter, ok := providerAdapterFor(provider); ok {
+		return adapter.label
 	}
+	return ""
+}
+
+func noAgentsMessage(provider string) string {
+	if label := providerLabel(provider); label != "" {
+		return "agent-picker: no running " + label + " agents found"
+	}
+	return "agent-picker: no running agents found"
 }
