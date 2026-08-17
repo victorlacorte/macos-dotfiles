@@ -25,6 +25,7 @@ return {
       'toml',
       'vim',
       'vimdoc',
+      'xml',
       'yaml',
 
       'diff',

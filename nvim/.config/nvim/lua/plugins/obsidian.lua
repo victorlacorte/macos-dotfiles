@@ -1,12 +1,12 @@
-local notes_path = vim.fn.expand('$HOME/notes/')
+local notes_dir = vim.fs.normalize(vim.fn.expand('~/notes'))
 
 return {
   'obsidian-nvim/obsidian.nvim',
   version = '*',
   lazy = true,
   event = {
-    'BufReadPre ' .. notes_path .. '*.md',
-    'BufNewFile ' .. notes_path .. '*.md',
+    'BufReadPre ' .. notes_dir .. '*.md',
+    'BufNewFile ' .. notes_dir .. '*.md',
   },
   ---@module 'obsidian'
   ---@type obsidian.config
@@ -18,7 +18,7 @@ return {
     workspaces = {
       {
         name = 'notes',
-        path = notes_path,
+        path = notes_dir,
       },
     },
     daily_notes = {
