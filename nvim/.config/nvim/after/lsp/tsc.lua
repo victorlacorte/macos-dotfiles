@@ -16,6 +16,6 @@ return {
       end
     end
 
-    error(('No local TypeScript executable found for tsgo workspace %q'):format(root_dir))
+    error(('No local TypeScript executable found for tsc workspace %q'):format(root_dir))
   end,
 }

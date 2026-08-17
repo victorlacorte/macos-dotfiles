@@ -30,7 +30,7 @@ return {
 
     vim.lsp.enable('racket_ls')
     vim.lsp.enable('sourcekit')
-    vim.lsp.enable('tsgo')
+    vim.lsp.enable('tsc')
 
     vim.api.nvim_create_autocmd('LspAttach', {
       group = vim.api.nvim_create_augroup('kickstart-lsp-attach', { clear = true }),
@@ -45,9 +45,9 @@ return {
         -- Rename the variable under your cursor.
         --  Most Language Servers support renaming across files, etc.
         map('<leader>rn', function()
-          local has_tsgo = #vim.lsp.get_clients({ bufnr = event.buf, name = 'tsgo' }) > 0
+          local has_tsc = #vim.lsp.get_clients({ bufnr = event.buf, name = 'tsc' }) > 0
 
-          if has_tsgo then
+          if has_tsc then
             local old_name = vim.fn.expand('<cword>')
             if old_name == nil or old_name == '' then
               return
