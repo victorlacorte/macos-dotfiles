@@ -3,7 +3,7 @@
 ## Requirements
 
 ```sh
-stow -n -v --target=$HOME ...
+stow --no --verbose --target=$HOME ...
 brew install pinentry-mac
 brew install tree-sitter-cli
 brew install fzf
@@ -21,6 +21,23 @@ make install-tmux-snapshot
 These install `agent-picker` and `tmux-snapshot` in `$HOME/.local/bin`.
 Re-run the relevant command after updating these dotfiles to rebuild the
 binary. The binaries are local build artifacts and are not committed.
+
+## Codex
+
+The `agents/.codex/general.config.toml` profile grants Codex's
+`workspace-write` sandbox access to `~/.codex/plans/`, which is required for
+persisting Plan Mode handoffs. Stow it to create
+`~/.codex/general.config.toml`:
+
+```sh
+mkdir -p "$HOME/.codex/plans"
+stow --target="$HOME" agents
+```
+
+The existing private `~/.codex/config.toml` remains untouched. The `codex`
+function in `zsh/.zshrc` automatically supplies `--profile general` unless an
+explicit profile is provided; use `command codex ...` to bypass the wrapper.
+`AGENTS.md` documents this permission but cannot grant it.
 
 ## Tmux
 
