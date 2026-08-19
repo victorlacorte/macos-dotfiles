@@ -3,4 +3,10 @@ description: Formatting preferences for generated plans
 alwaysApply: true
 ---
 
-Plan filenames must use kebab-case: lowercase words separated by `-` (regular dash), with no spaces or underscores. For example: `foo-bar.md`.
+Plan filenames must use the format `YYYY-MM-dd-<subject-slug>.md`, where:
+
+- `YYYY-MM-dd` is the plan creation date.
+- `<subject-slug>` is kebab-case: lowercase words separated by `-` (regular dash), with no spaces or underscores.
+- If the generated path already belongs to another plan, add a numeric suffix when creating the file.
+
+For example: `2026-08-18-refactor-feature-flags.md`.
