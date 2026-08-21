@@ -229,6 +229,12 @@ func TestValidateInputAndResolveOutput(t *testing.T) {
 	if _, err := resolveExplicitOutput(filepath.Join(root, "missing", "preview.html"), canonicalInput); err == nil || !strings.Contains(err.Error(), "output directory does not exist") {
 		t.Fatalf("missing output directory error = %v", err)
 	}
+
+	txt := filepath.Join(source, "notes.txt")
+	writeFile(t, txt, "not a Markdown input\n")
+	if _, err := validateInput(txt); err == nil || !strings.Contains(err.Error(), "Markdown extension") {
+		t.Fatalf("non-markdown input error = %v", err)
+	}
 }
 
 func TestResolveCachedOutput(t *testing.T) {
@@ -271,13 +277,17 @@ func TestMainRenderAtomicityAndBrowserGating(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dataDir, "pandoc"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	source := filepath.Join(root, "source.md")
+	sourceDir := filepath.Join(root, "source with spaces and Unicode é")
+	if err := os.Mkdir(sourceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(sourceDir, "representative copy.md")
 	writeFile(t, source, "# source\n")
-	outDir := filepath.Join(root, "output")
+	outDir := filepath.Join(root, "output with spaces")
 	if err := os.Mkdir(outDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	output := filepath.Join(outDir, "preview.html")
+	output := filepath.Join(outDir, "preview é.html")
 	lookup := func(name string) (string, error) {
 		return "/fake/" + name, nil
 	}
@@ -312,7 +322,7 @@ func TestMainRenderAtomicityAndBrowserGating(t *testing.T) {
 		t.Fatalf("successful render status = %d, stderr=%q", status, stderr.String())
 	}
 	canonicalOutputDir, _ := canonicalPath(outDir)
-	resolvedOutput := filepath.Join(canonicalOutputDir, "preview.html")
+	resolvedOutput := filepath.Join(canonicalOutputDir, "preview é.html")
 	if got := stdout.String(); got != resolvedOutput+"\n" {
 		t.Fatalf("render stdout = %q, want %q", got, resolvedOutput+"\n")
 	}
@@ -432,6 +442,22 @@ func TestMainMissingCommandAndOpenFailure(t *testing.T) {
 	}
 	if got := stderr.String(); !strings.Contains(got, "md-view: error: required command not found: open\n") {
 		t.Fatalf("missing open stderr = %q", got)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	missingPandoc := *missingOpen
+	missingPandoc.LookPath = func(name string) (string, error) {
+		if name == "open" {
+			return "/fake/open", nil
+		}
+		return "", errors.New("not found")
+	}
+	if status := missingPandoc.Main(context.Background(), []string{source}); status != 1 {
+		t.Fatalf("missing pandoc status = %d, want 1", status)
+	}
+	if got := stderr.String(); !strings.Contains(got, "md-view: error: required command not found: pandoc\n") {
+		t.Fatalf("missing pandoc stderr = %q", got)
 	}
 
 	runner := &recordingRunner{failOpen: true}

@@ -148,17 +148,16 @@ concrete-syntax parser alongside Pandoc.
 
 ## Tests
 
-The shell suite builds the Go command into its temporary directory, then uses
-fake `pandoc` and `open` commands to test parsing, argument order, quoting,
-atomic failure behavior, and browser-launch rules. It then renders the
-representative fixture with the real Pandoc executable and checks source
-positions, table structure, Mermaid source, embedded CSS, embedded local
-images, raw-HTML handling, and the pinned external script.
+Unit tests cover parsing, argument order, quoting, atomic failure behavior, and
+browser-launch rules. An integration test renders the representative fixture
+with real Pandoc and checks source positions, table structure, Mermaid source,
+embedded CSS, embedded local images, raw-HTML handling, and the pinned
+external script.
 
-Run it directly, or run all repository tests:
+Run the Go tests from the module, or run all repository tests:
 
 ```sh
-sh tools/md-view/test/md-view_test.sh
+go -C tools/md-view test ./...
 make test
 ```
 

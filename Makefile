@@ -5,7 +5,6 @@ test:
 	go -C tools/tmux-snapshot test ./...
 	go -C tools/md-view test ./...
 	$(MAKE) verify-md-view-css
-	sh tools/md-view/test/md-view_test.sh
 
 install-agent-picker:
 	GOBIN=$(HOME)/.local/bin go -C tools/agent-picker install ./cmd/agent-picker
