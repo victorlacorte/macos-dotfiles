@@ -20,7 +20,33 @@ make install-tmux-snapshot
 
 These install `agent-picker` and `tmux-snapshot` in `$HOME/.local/bin`.
 Re-run the relevant command after updating these dotfiles to rebuild the
-binary. The binaries are local build artifacts and are not committed.
+binaries. The binaries are local build artifacts and are not committed.
+
+The `md-view` source in `tools/md-view` also requires Go 1.22 or newer. It
+renders a Markdown file to a self-contained HTML preview
+and opens it in the default macOS browser. Install Pandoc through mise, then
+install the CLI and its Pandoc assets:
+
+```sh
+mise install pandoc
+make install-md-view
+```
+
+Use `md-view FILE.md` for a browser preview or
+`md-view render FILE.md --output OUTPUT.html` for a non-opening render. The
+HTML embeds CSS and local images. Mermaid diagrams use one pinned browser
+runtime loaded from jsDelivr, so the browser needs network access to render
+those diagrams.
+
+For development, run the Go command from the repository with the asset
+directory set explicitly:
+
+```sh
+MD_VIEW_DATA_DIR="$PWD/tools/md-view" go -C tools/md-view run ./cmd/md-view FILE.md
+```
+
+Installed binaries discover the repository-relative or installed assets
+automatically.
 
 ## Codex
 

@@ -1,0 +1,68 @@
+<script data-external="1" src="https://cdn.jsdelivr.net/npm/mermaid@11.12.1/dist/mermaid.min.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  function addError(node, message, source) {
+    if (typeof source === "string") {
+      node.textContent = source;
+    }
+    node.classList.add("mermaid-failed");
+    var existing = node.nextElementSibling;
+    if (existing && existing.classList.contains("mermaid-error")) {
+      existing.textContent = message;
+      return;
+    }
+    var error = document.createElement("p");
+    error.className = "mermaid-error";
+    error.setAttribute("role", "status");
+    error.textContent = message;
+    node.insertAdjacentElement("afterend", error);
+  }
+
+  function renderDiagrams() {
+    var nodes = Array.prototype.slice.call(document.querySelectorAll(".mermaid"));
+    var diagrams = nodes.map(function (node) {
+      return { node: node, source: node.textContent };
+    });
+    if (!nodes.length) {
+      return;
+    }
+    if (!window.mermaid || typeof window.mermaid.run !== "function") {
+      diagrams.forEach(function (diagram) {
+        addError(diagram.node, "Mermaid is unavailable. The diagram source is shown above.", diagram.source);
+      });
+      return;
+    }
+
+    var dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    window.mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "strict",
+      theme: dark ? "dark" : "default",
+      flowchart: { useMaxWidth: true },
+      sequence: { useMaxWidth: true }
+    });
+
+    diagrams.forEach(function (diagram) {
+      var node = diagram.node;
+      try {
+        var result = window.mermaid.run({ nodes: [node] });
+        if (result && typeof result.catch === "function") {
+          result.catch(function () {
+            addError(node, "Mermaid could not render this diagram. The diagram source is shown above.", diagram.source);
+          });
+        }
+      } catch (error) {
+        addError(node, "Mermaid could not render this diagram. The diagram source is shown above.", diagram.source);
+      }
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", renderDiagrams);
+  } else {
+    renderDiagrams();
+  }
+}());
+</script>

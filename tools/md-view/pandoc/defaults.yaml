@@ -1,0 +1,11 @@
+from: gfm+sourcepos+yaml_metadata_block+fenced_divs+bracketed_spans+attributes-raw_html
+to: html5
+standalone: true
+embed-resources: true
+html-q-tags: true
+filters:
+  - pandoc/filters/md-view.lua
+include-in-header:
+  - pandoc/includes/mermaid.html
+css:
+  - pandoc/styles/md-view.css

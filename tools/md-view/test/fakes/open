@@ -1,0 +1,11 @@
+#!/bin/sh
+
+set -eu
+
+: "${MD_VIEW_FAKE_OPEN_LOG:?MD_VIEW_FAKE_OPEN_LOG is required}"
+
+: >"$MD_VIEW_FAKE_OPEN_LOG"
+for argument do
+  printf '%s\n' "$argument" >>"$MD_VIEW_FAKE_OPEN_LOG"
+done
+exit "${MD_VIEW_FAKE_OPEN_STATUS:-0}"

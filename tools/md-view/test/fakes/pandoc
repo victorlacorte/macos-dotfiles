@@ -1,0 +1,24 @@
+#!/bin/sh
+
+set -eu
+
+: "${MD_VIEW_FAKE_PANDOC_LOG:?MD_VIEW_FAKE_PANDOC_LOG is required}"
+
+: >"$MD_VIEW_FAKE_PANDOC_LOG"
+for argument do
+  printf '%s\n' "$argument" >>"$MD_VIEW_FAKE_PANDOC_LOG"
+done
+
+if [ "${MD_VIEW_FAKE_PANDOC_FAIL:-0}" = 1 ]; then
+  printf '%s\n' 'fake pandoc parse failure' >&2
+  exit 17
+fi
+
+fake_output=
+for argument do
+  case "$argument" in
+    --output=*) fake_output=${argument#--output=} ;;
+  esac
+done
+[ -n "$fake_output" ] || { printf '%s\n' 'fake pandoc did not receive --output' >&2; exit 18; }
+printf '%s\n' '<!doctype html><html><body><p>fake render</p></body></html>' >"$fake_output"
