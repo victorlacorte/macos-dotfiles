@@ -2,6 +2,7 @@
 node = "latest"
 pandoc = "latest"
 "npm:@styled/typescript-styled-plugin" = "latest"
+"npm:@tailwindcss/cli" = "4.3.3"
 "npm:corepack" = "latest"
 "npm:serve" = "latest"
 
