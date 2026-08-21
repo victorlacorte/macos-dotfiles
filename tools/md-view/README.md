@@ -97,9 +97,24 @@ The static include initializes Mermaid after the document is ready, uses
 preference, and handles each diagram independently. A bad diagram gets a
 visible error while the rest of the document remains readable.
 
-The stylesheet constrains prose width, makes wide tables scroll horizontally,
-styles code and common Markdown blocks, sizes Mermaid SVGs responsively, and
-provides light, dark, and print rules.
+The preview stylesheet starts as `pandoc/styles/md-view.src.css`. Tailwind CSS
+4.3.3 and `@tailwindcss/typography` compile that into `pandoc/styles/md-view.css`,
+which is the file Pandoc embeds and `make install-md-view` copies. Pandoc writes
+plain HTML, so the source file applies the `prose` styles to `body` instead of
+stamping utility classes onto the document.
+
+Regenerate the committed CSS from the repository root after editing the source:
+
+```sh
+make build-md-view-css
+```
+
+`make test` compiles again into a temp file and fails if the committed CSS
+differs. The result uses a 76rem container, the system sans stack, GitHub-like
+link colors, and the md-view rules for wide tables, Mermaid, callouts,
+dark-mode code spans, and print. Pandoc still injects its own highlight
+stylesheet. Dark mode overrides those span colors here, rather than setting
+`highlight-style` in the defaults file.
 
 ## Source positions and trust boundary
 

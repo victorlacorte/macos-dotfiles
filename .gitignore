@@ -1,4 +1,5 @@
 *.local
+node_modules/
 
 karabiner/.config/karabiner/automatic_backups/
 nvim.log

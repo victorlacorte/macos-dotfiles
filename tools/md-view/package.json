@@ -1,0 +1,10 @@
+{
+  "name": "md-view-styles",
+  "private": true,
+  "description": "Pinned toolchain for building pandoc/styles/md-view.css",
+  "devDependencies": {
+    "@tailwindcss/cli": "4.3.3",
+    "@tailwindcss/typography": "0.5.20",
+    "tailwindcss": "4.3.3"
+  }
+}

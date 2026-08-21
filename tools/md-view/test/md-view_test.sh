@@ -197,6 +197,7 @@ assert_equal "$integration_output" "$(sed -n '1p' "$integration_stdout")" 'integ
 assert_contains "$integration_output" '<!DOCTYPE html>'
 assert_contains "$integration_output" '<style>'
 assert_contains "$integration_output" '.table-scroll'
+assert_contains "$integration_output" '--tw-prose-body'
 assert_not_contains "$integration_output" 'md-view.css'
 assert_contains "$integration_output" 'data:image/svg+xml'
 assert_not_contains "$integration_output" 'local-image.svg'

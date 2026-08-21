@@ -34,9 +34,11 @@ make install-md-view
 
 Use `md-view FILE.md` for a browser preview or
 `md-view render FILE.md --output OUTPUT.html` for a non-opening render. The
-HTML embeds CSS and local images. Mermaid diagrams use one pinned browser
-runtime loaded from jsDelivr, so the browser needs network access to render
-those diagrams.
+HTML embeds CSS and local images. The stylesheet is compiled from Tailwind
+Typography; edit `tools/md-view/pandoc/styles/md-view.src.css` and run
+`make build-md-view-css` before committing. Mermaid diagrams use one pinned
+browser runtime loaded from jsDelivr, so the browser needs network access to
+render those diagrams.
 
 For development, run the Go command from the repository with the asset
 directory set explicitly:

@@ -1,0 +1,192 @@
+@import "tailwindcss/theme" layer(theme) source(none);
+@import "tailwindcss/utilities" layer(utilities) source(none);
+@plugin "@tailwindcss/typography";
+
+:root {
+  color-scheme: light dark;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: 3rem clamp(1rem, 4vw, 4rem);
+  background: #ffffff;
+  @apply prose prose-neutral dark:prose-invert max-w-none;
+  max-width: 76rem;
+  --tw-prose-links: #0969da;
+  --tw-prose-invert-links: #58a6ff;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #0d1117;
+  }
+}
+
+.table-scroll {
+  max-width: 100%;
+  margin: 1rem 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-scroll table {
+  width: max-content;
+  min-width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+}
+
+.table-scroll th,
+.table-scroll td {
+  padding: 0.6rem 0.8rem;
+  text-align: left;
+  vertical-align: top;
+  border: 1px solid #d0d7de;
+  overflow-wrap: anywhere;
+}
+
+.table-scroll th {
+  color: #111827;
+  background: #f6f8fa;
+}
+
+.table-scroll tbody tr:nth-child(even) {
+  background: #f6f8fa;
+}
+
+.mermaid {
+  max-width: 100%;
+  margin: 1.5rem 0;
+  padding: 1rem;
+  overflow-x: auto;
+  text-align: center;
+  background: #f6f8fa;
+  border: 1px solid #d0d7de;
+  border-radius: 0.5rem;
+  white-space: pre;
+}
+
+.mermaid svg {
+  display: inline-block;
+  max-width: none;
+  min-width: min(100%, 28rem);
+  margin: 0 auto;
+}
+
+.mermaid-failed {
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+.mermaid-error {
+  margin-top: -1rem;
+  padding: 0.5rem 0.75rem;
+  color: #9a3412;
+  background: #ffedd5;
+  border-radius: 0.25rem;
+}
+
+.callout {
+  margin: 1.5rem 0;
+  padding: 0.75rem 1rem;
+  background: #f6f8fa;
+  border-left: 0.25rem solid #0969da;
+}
+
+@media (prefers-color-scheme: dark) {
+  .table-scroll th {
+    color: #f0f6fc;
+  }
+
+  pre,
+  div.sourceCode,
+  .table-scroll th,
+  .table-scroll tbody tr:nth-child(even),
+  .mermaid,
+  .callout {
+    color: #e6edf3;
+    background: #161b22;
+    border-color: #30363d;
+  }
+
+  div.sourceCode pre.sourceCode {
+    color: #e6edf3;
+  }
+
+  code.sourceCode span {
+    color: #e6edf3;
+  }
+
+  code.sourceCode span.kw,
+  code.sourceCode span.cf,
+  code.sourceCode span.fu {
+    color: #ff7b72;
+  }
+
+  code.sourceCode span.st,
+  code.sourceCode span.sc,
+  code.sourceCode span.vs {
+    color: #a5d6ff;
+  }
+
+  code.sourceCode span.co,
+  code.sourceCode span.cv,
+  code.sourceCode span.ch {
+    color: #8b949e;
+  }
+
+  code.sourceCode span.dv,
+  code.sourceCode span.bn,
+  code.sourceCode span.fl {
+    color: #79c0ff;
+  }
+
+  code.sourceCode span.ot,
+  code.sourceCode span.at,
+  code.sourceCode span.dt {
+    color: #d2a8ff;
+  }
+
+  .table-scroll th,
+  .table-scroll td {
+    border-color: #30363d;
+  }
+
+  .mermaid-error {
+    color: #ffb4a2;
+    background: #4a1d16;
+  }
+}
+
+@media print {
+  body {
+    max-width: none;
+    padding: 0;
+    color: #000;
+    background: #fff;
+  }
+
+  .table-scroll {
+    overflow: visible;
+  }
+
+  .table-scroll table {
+    width: 100%;
+  }
+
+  .mermaid {
+    overflow: visible;
+    color: #000;
+    background: #fff;
+    break-inside: avoid;
+  }
+
+  .mermaid-error {
+    color: #000;
+    background: #fff;
+    border: 1px solid #000;
+  }
+}
