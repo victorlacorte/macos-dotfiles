@@ -7,7 +7,7 @@ import (
 	"io"
 )
 
-const snapshotVersion = 1
+const snapshotVersion = 2
 
 type Snapshot struct {
 	Version  int       `json:"version"`
@@ -15,18 +15,9 @@ type Snapshot struct {
 }
 
 type Session struct {
-	Name     string   `json:"name"`
-	Path     string   `json:"path"`
-	Attached bool     `json:"attached"`
-	Windows  []Window `json:"windows"`
-}
-
-type Window struct {
-	Index      int    `json:"index"`
-	Name       string `json:"name"`
-	Path       string `json:"path"`
-	Active     bool   `json:"active"`
-	ManualName bool   `json:"manualName"`
+	Name     string `json:"name"`
+	Path     string `json:"path"`
+	Attached bool   `json:"attached"`
 }
 
 func (s Snapshot) Validate() error {
@@ -49,20 +40,6 @@ func (s Snapshot) Validate() error {
 			return fmt.Errorf("duplicate session %q", session.Name)
 		}
 		sessionNames[session.Name] = struct{}{}
-
-		windowIndexes := make(map[int]struct{}, len(session.Windows))
-		for j, window := range session.Windows {
-			if window.Index < 0 {
-				return fmt.Errorf("session %q window %d has a negative index", session.Name, j)
-			}
-			if window.Path == "" {
-				return fmt.Errorf("session %q window %d has an empty path", session.Name, window.Index)
-			}
-			if _, exists := windowIndexes[window.Index]; exists {
-				return fmt.Errorf("session %q has duplicate window index %d", session.Name, window.Index)
-			}
-			windowIndexes[window.Index] = struct{}{}
-		}
 	}
 	return nil
 }
@@ -80,6 +57,17 @@ func encodeSnapshot(snapshot Snapshot) ([]byte, error) {
 }
 
 func decodeSnapshot(data []byte) (Snapshot, error) {
+	versionDecoder := json.NewDecoder(bytes.NewReader(data))
+	var version struct {
+		Version int `json:"version"`
+	}
+	if err := versionDecoder.Decode(&version); err != nil {
+		return Snapshot{}, fmt.Errorf("decode snapshot: %w", err)
+	}
+	if version.Version != snapshotVersion {
+		return Snapshot{}, fmt.Errorf("unsupported snapshot version %d", version.Version)
+	}
+
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 

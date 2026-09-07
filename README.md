@@ -146,20 +146,28 @@ upstream MIT license notice.
 
 ### Tmux snapshots
 
-Save and restore tmux sessions, windows, working directories, window indices,
-manual window names, and the active session/window:
+Save and restore tmux sessions, project directories, and the attached-session
+selection:
 
 ```sh
 tmux-snapshot save
 tmux-snapshot restore
 ```
 
+Snapshots preserve session names, directories, and whether each session was
+attached when it was saved, in tmux session-index order. Restore creates one
+default shell window for each missing session. Windows, panes, commands or
+processes, layouts, and scrollback are not captured.
+
+Snapshots use version 2. Version 1 snapshots are not supported. After
+upgrading, run `tmux-snapshot save` before using the default restore command;
+old snapshot files remain on disk and are not rewritten.
+
 Snapshots are stored in
 `${XDG_STATE_HOME:-$HOME/.local/state}/tmux-snapshot/`. The `latest` symlink is
 used by restore when no file is provided; if it is missing, restore falls back to
 the newest `.json` file in that directory. Snapshots are JSON files named with
-their UTC save time. Running processes, scrollback, pane splits, and pane layouts
-are not captured. Pass a file path to either command to save or restore a
+their UTC save time. Pass a file path to either command to save or restore a
 specific snapshot. There is no picker: selecting an older snapshot means naming
 its path.
 
@@ -168,8 +176,14 @@ snapshot never becomes the default for restore.
 
 Restore only adds sessions. A session whose name already exists is left
 untouched, and one whose recorded path no longer exists is skipped with a
-warning. A session that fails partway through is rolled back and killed, leaving
-the rest of the snapshot to restore normally.
+warning. If creating one session fails, restore reports the failure and
+continues with the remaining sessions.
+
+On an empty tmux server, restore creates sessions in the saved order. If the
+server already has sessions, restore leaves them untouched and preserves the
+saved relative order among sessions it creates. Tmux cannot reassign existing
+session IDs, so restore cannot reproduce the full saved order around sessions
+that were already present.
 
 ## Git
 

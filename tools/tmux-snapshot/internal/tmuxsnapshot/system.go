@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"strings"
 	"time"
 )
 
@@ -78,8 +77,4 @@ func (a *App) runQuiet(ctx context.Context, name string, args ...string) (string
 
 func (a *App) runWithStderr(ctx context.Context, stderr io.Writer, name string, args ...string) (string, error) {
 	return a.Runner.Run(ctx, Command{Name: name, Args: args, Stderr: stderr})
-}
-
-func trimOutput(output string) string {
-	return strings.TrimSuffix(strings.TrimSuffix(output, "\n"), "\r")
 }
