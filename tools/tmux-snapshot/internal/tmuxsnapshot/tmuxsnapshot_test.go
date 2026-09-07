@@ -3,6 +3,7 @@ package tmuxsnapshot
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -80,28 +81,21 @@ func tmuxOutput(records ...[]string) string {
 	return builder.String()
 }
 
-func TestSaveUsesTwoTmuxCallsAndPreservesPaths(t *testing.T) {
+func TestSaveUsesOneTmuxCallAndPreservesSessionData(t *testing.T) {
 	stateHome := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", stateHome)
 	mainPath := filepath.Join(stateHome, "main\tproject\npath")
-	windowPath := filepath.Join(stateHome, "window\tpath\nline")
+	alphaPath := filepath.Join(stateHome, "alpha")
 	runner := &fakeRunner{
 		handler: func(command Command) (string, error) {
-			switch command.Args[0] {
-			case "list-sessions":
-				return tmuxOutput(
-					[]string{"20", "older", "/tmp/older", "0"},
-					[]string{"10", "main", mainPath, "1"},
-				), nil
-			case "list-windows":
-				return tmuxOutput(
-					[]string{"main", "3", "automatic\tname\nline", windowPath, "1", "off"},
-					[]string{"older", "0", "shell", "/tmp/older", "1", "on"},
-					[]string{"main", "1", "editor", mainPath, "0", "on"},
-				), nil
-			default:
-				return "", errors.New("unexpected tmux command")
+			if command.Name != "tmux" || len(command.Args) == 0 || command.Args[0] != "list-sessions" {
+				return "", fmt.Errorf("unexpected tmux command: %#v", command)
 			}
+			return tmuxOutput(
+				[]string{"older", "/tmp/older", "0"},
+				[]string{"main", mainPath, "2"},
+				[]string{"alpha", alphaPath, "1"},
+			), nil
 		},
 	}
 	app := testApp(runner, t.TempDir())
@@ -123,45 +117,37 @@ func TestSaveUsesTwoTmuxCallsAndPreservesPaths(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := Snapshot{
-		Version: 1,
+		Version: 2,
 		Sessions: []Session{
-			{
-				Name:     "main",
-				Path:     mainPath,
-				Attached: true,
-				Windows: []Window{
-					{Index: 1, Name: "editor", Path: mainPath, Active: false, ManualName: false},
-					{Index: 3, Name: "automatic\tname\nline", Path: windowPath, Active: true, ManualName: true},
-				},
-			},
-			{
-				Name:    "older",
-				Path:    "/tmp/older",
-				Windows: []Window{{Index: 0, Name: "shell", Path: "/tmp/older", Active: true}},
-			},
+			{Name: "older", Path: "/tmp/older"},
+			{Name: "main", Path: mainPath, Attached: true},
+			{Name: "alpha", Path: alphaPath, Attached: true},
 		},
 	}
 	if !reflect.DeepEqual(snapshot, want) {
 		t.Fatalf("snapshot mismatch:\n got: %#v\nwant: %#v", snapshot, want)
 	}
-	commands := runner.Commands()
-	if commandCount(commands, "tmux") != 2 {
-		t.Fatalf("save made %d tmux calls, want 2: %#v", commandCount(commands, "tmux"), commands)
-	}
-	for _, command := range commands {
-		if command.Name != "tmux" {
-			t.Fatalf("unexpected command: %#v", command)
-		}
+	if strings.Contains(string(data), `"windows"`) {
+		t.Fatalf("snapshot unexpectedly contains window data: %s", data)
 	}
 
-	stateDir := filepath.Dir(path)
-	if mode := fileMode(t, stateDir); mode != 0o700 {
+	commands := runner.Commands()
+	if commandCount(commands, "tmux") != 1 {
+		t.Fatalf("save made %d tmux calls, want 1: %#v", commandCount(commands, "tmux"), commands)
+	}
+	if len(commands) != 1 || !reflect.DeepEqual(commands[0].Args, []string{
+		"list-sessions", "-O", "index", "-F",
+		"#{session_name}" + unitSeparator + "#{session_path}" + unitSeparator + "#{session_attached}" + recordSeparator,
+	}) {
+		t.Fatalf("save used unexpected commands: %#v", commands)
+	}
+	if mode := fileMode(t, filepath.Dir(path)); mode != 0o700 {
 		t.Fatalf("state directory mode: got %o, want 700", mode)
 	}
 	if mode := fileMode(t, path); mode != 0o600 {
 		t.Fatalf("snapshot mode: got %o, want 600", mode)
 	}
-	target, err := os.Readlink(filepath.Join(stateDir, "latest"))
+	target, err := os.Readlink(filepath.Join(filepath.Dir(path), "latest"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,15 +156,33 @@ func TestSaveUsesTwoTmuxCallsAndPreservesPaths(t *testing.T) {
 	}
 }
 
+func TestSaveRejectsInvalidSessionAttachedCount(t *testing.T) {
+	for _, value := range []string{"-1", "many"} {
+		t.Run(value, func(t *testing.T) {
+			stateHome := t.TempDir()
+			t.Setenv("XDG_STATE_HOME", stateHome)
+			runner := &fakeRunner{
+				handler: func(command Command) (string, error) {
+					return tmuxOutput([]string{"work", "/tmp", value}), nil
+				},
+			}
+			app := testApp(runner, t.TempDir())
+			if _, err := app.Save(context.Background(), ""); err == nil {
+				t.Fatal("save unexpectedly succeeded")
+			}
+		})
+	}
+}
+
 func TestSaveCollisionSuffixAndDefaultResolution(t *testing.T) {
 	stateHome := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", stateHome)
 	runner := &fakeRunner{
 		handler: func(command Command) (string, error) {
-			if command.Args[0] == "list-sessions" {
-				return tmuxOutput([]string{"1", "work", "/tmp", "0"}), nil
+			if command.Args[0] != "list-sessions" {
+				return "", fmt.Errorf("unexpected tmux command: %#v", command)
 			}
-			return tmuxOutput([]string{"work", "0", "shell", "/tmp", "1", "on"}), nil
+			return tmuxOutput([]string{"work", "/tmp", "0"}), nil
 		},
 	}
 	app := testApp(runner, t.TempDir())
@@ -201,64 +205,58 @@ func TestSaveCollisionSuffixAndDefaultResolution(t *testing.T) {
 	if resolved != filepath.Join(stateHome, "tmux-snapshot", "latest") {
 		t.Fatalf("resolved default: got %q", resolved)
 	}
+	if commandCount(runner.Commands(), "tmux") != 2 {
+		t.Fatalf("save made an unexpected number of tmux calls: %#v", runner.Commands())
+	}
 }
 
 func TestSnapshotValidation(t *testing.T) {
+	valid := `{"version":2,"sessions":[{"name":"s","path":"/tmp","attached":false}]}`
 	tests := []struct {
-		name string
-		data string
+		name    string
+		data    string
+		wantErr string
 	}{
-		{name: "malformed json", data: `{`},
-		{name: "zero sessions", data: `{"version":1,"sessions":[]}`},
-		{name: "unknown field", data: `{"version":1,"sessions":[],"extra":true}`},
-		{name: "duplicate window index", data: `{"version":1,"sessions":[{"name":"s","path":"/tmp","windows":[{"index":0,"path":"/tmp"},{"index":0,"path":"/tmp"}]}]}`},
+		{name: "malformed json", data: `{`, wantErr: "decode snapshot"},
+		{name: "version 1", data: `{"version":1,"sessions":[{"name":"s","path":"/tmp","attached":false}]}`, wantErr: "unsupported snapshot version 1"},
+		{name: "version 1 legacy windows", data: `{"version":1,"sessions":[{"name":"s","path":"/tmp","attached":false,"windows":[]}]}`, wantErr: "unsupported snapshot version 1"},
+		{name: "zero sessions", data: `{"version":2,"sessions":[]}`, wantErr: "snapshot contains no sessions"},
+		{name: "unknown top-level field", data: `{"version":2,"sessions":[],"extra":true}`, wantErr: "decode snapshot"},
+		{name: "legacy windows field", data: `{"version":2,"sessions":[{"name":"s","path":"/tmp","attached":false,"windows":[]}]}`, wantErr: "decode snapshot"},
+		{name: "trailing value", data: valid + ` {}`, wantErr: "multiple JSON values"},
+		{name: "empty name", data: `{"version":2,"sessions":[{"name":"","path":"/tmp","attached":false}]}`, wantErr: "empty name"},
+		{name: "empty path", data: `{"version":2,"sessions":[{"name":"s","path":"","attached":false}]}`, wantErr: "empty path"},
+		{name: "duplicate session name", data: `{"version":2,"sessions":[{"name":"s","path":"/tmp","attached":false},{"name":"s","path":"/var","attached":true}]}`, wantErr: "duplicate session"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, err := decodeSnapshot([]byte(tt.data)); err == nil {
+			_, err := decodeSnapshot([]byte(tt.data))
+			if err == nil {
 				t.Fatal("decode unexpectedly succeeded")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("error: got %q, want substring %q", err, tt.wantErr)
 			}
 		})
 	}
 }
 
-func TestRestoreRespawnsBaseWindowAndRestoresOptions(t *testing.T) {
+func TestRestoreCreatesOneDefaultWindowPerMissingSession(t *testing.T) {
 	dir := t.TempDir()
-	windowDir := filepath.Join(dir, "window")
-	if err := os.Mkdir(windowDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
 	snapshot := Snapshot{
-		Version: 1,
-		Sessions: []Session{{
-			Name: "work", Path: dir, Attached: true,
-			Windows: []Window{
-				{Index: 1, Name: "editor", Path: dir, ManualName: true},
-				{Index: 3, Name: "shell", Path: filepath.Join(dir, "missing"), Active: true},
-			},
-		}},
+		Version:  2,
+		Sessions: []Session{{Name: "work", Path: dir}},
 	}
 	file := writeTestSnapshot(t, snapshot)
 	runner := &fakeRunner{
 		handler: func(command Command) (string, error) {
-			if command.Name != "tmux" {
-				return "", errors.New("unexpected command")
-			}
-			switch command.Args[0] {
-			case "has-session":
+			if command.Args[0] == "has-session" {
 				return "", errors.New("missing")
-			case "show-option":
-				if command.Args[len(command.Args)-1] == "base-index" {
-					return "1\n", nil
-				}
-				if command.Args[len(command.Args)-1] == "renumber-windows" &&
-					command.Args[1] == "-t" {
-					return "off\n", nil
-				}
-				return "on\n", nil
-			default:
+			}
+			if command.Args[0] == "new-session" {
 				return "", nil
 			}
+			return "", fmt.Errorf("unexpected tmux command: %#v", command)
 		},
 	}
 	app := testApp(runner, t.TempDir())
@@ -266,126 +264,151 @@ func TestRestoreRespawnsBaseWindowAndRestoresOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 	commands := runner.Commands()
-	if !commandHas(commands, "tmux", "respawn-window", "-k", "-t", "=work:1", "-c", dir) {
-		t.Fatalf("base window was not respawned: %#v", commands)
+	if !commandHas(commands, "tmux", "new-session", "-d", "-s", "work", "-c", dir) {
+		t.Fatalf("session was not created with the recorded directory: %#v", commands)
 	}
-	if !commandHas(commands, "tmux", "rename-window", "-t", "=work:1", "editor") {
-		t.Fatalf("manual base name was not restored: %#v", commands)
+	if commandCount(commands, "tmux") != 2 || len(commands) != 2 {
+		t.Fatalf("restore made unexpected commands: %#v", commands)
 	}
-	if !commandHas(commands, "tmux", "new-window", "-d", "-t", "=work:3", "-c", dir) {
-		t.Fatalf("fallback window was not created: %#v", commands)
-	}
-	if !commandHas(commands, "tmux", "set-option", "-t", "work", "renumber-windows", "off") {
-		t.Fatalf("renumber-windows was not restored: %#v", commands)
-	}
-	if !commandHas(commands, "tmux", "select-window", "-t", "=work:3") {
-		t.Fatalf("active window was not selected: %#v", commands)
+	for _, command := range commands {
+		if len(command.Args) > 0 && (strings.Contains(command.Args[0], "window") || strings.Contains(command.Args[0], "option")) {
+			t.Fatalf("restore issued a window or option command: %#v", command)
+		}
 	}
 }
 
-func TestRestoreKillsInitialBaseWindowWhenVacant(t *testing.T) {
+func TestRestoreCreatesMissingSessionsInSnapshotOrder(t *testing.T) {
 	dir := t.TempDir()
 	snapshot := Snapshot{
-		Version: 1,
-		Sessions: []Session{{
-			Name: "work", Path: dir,
-			Windows: []Window{{Index: 2, Name: "shell", Path: dir, ManualName: true}},
-		}},
-	}
-	file := writeTestSnapshot(t, snapshot)
-	runner := &fakeRunner{
-		handler: func(command Command) (string, error) {
-			if command.Args[0] == "has-session" {
-				return "", errors.New("missing")
-			}
-			if command.Args[0] == "show-option" && command.Args[len(command.Args)-1] == "base-index" {
-				return "0", nil
-			}
-			return "", nil
-		},
-	}
-	app := testApp(runner, t.TempDir())
-	if err := app.restoreSnapshot(context.Background(), file); err != nil {
-		t.Fatal(err)
-	}
-	commands := runner.Commands()
-	if !commandHas(commands, "tmux", "new-window", "-d", "-t", "=work:2", "-c", dir, "-n", "shell") {
-		t.Fatalf("snapshot window was not created: %#v", commands)
-	}
-	if !commandHas(commands, "tmux", "kill-window", "-t", "=work:0") {
-		t.Fatalf("initial base window was not killed: %#v", commands)
-	}
-}
-
-func TestRestoreIsolationAndExistingOrMissingSessions(t *testing.T) {
-	dir := t.TempDir()
-	snapshot := Snapshot{
-		Version: 1,
+		Version: 2,
 		Sessions: []Session{
-			{Name: "existing", Path: dir, Attached: true, Windows: []Window{{Index: 0, Path: dir}}},
-			{Name: "gone", Path: filepath.Join(dir, "gone"), Windows: []Window{{Index: 0, Path: dir}}},
-			{Name: "broken", Path: dir, Windows: []Window{{Index: 0, Path: dir}, {Index: 2, Path: dir}}},
-			{Name: "later", Path: dir, Windows: []Window{{Index: 0, Path: dir}}},
+			{Name: "zebra", Path: dir},
+			{Name: "alpha", Path: dir},
+			{Name: "middle", Path: dir},
+		},
+	}
+	file := writeTestSnapshot(t, snapshot)
+	for _, test := range []struct {
+		name     string
+		existing string
+		want     []string
+	}{
+		{name: "empty server", want: []string{"zebra", "alpha", "middle"}},
+		{name: "middle session already exists", existing: "=alpha", want: []string{"zebra", "middle"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			runner := &fakeRunner{
+				handler: func(command Command) (string, error) {
+					switch command.Args[0] {
+					case "has-session":
+						if command.Args[2] == test.existing {
+							return "", nil
+						}
+						return "", errors.New("missing")
+					case "new-session":
+						return "", nil
+					default:
+						return "", fmt.Errorf("unexpected tmux command: %#v", command)
+					}
+				},
+			}
+			app := testApp(runner, t.TempDir())
+			if err := app.restoreSnapshot(context.Background(), file); err != nil {
+				t.Fatal(err)
+			}
+
+			var got []string
+			for _, command := range runner.Commands() {
+				if command.Args[0] == "new-session" {
+					got = append(got, command.Args[3])
+				}
+			}
+			if !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("new-session order: got %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestRestoreSkipsExistingAndMissingSessionsAndContinuesAfterFailure(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "gone")
+	snapshot := Snapshot{
+		Version: 2,
+		Sessions: []Session{
+			{Name: "existing", Path: dir, Attached: true},
+			{Name: "gone", Path: missing},
+			{Name: "broken", Path: dir},
+			{Name: "later", Path: dir},
 		},
 	}
 	file := writeTestSnapshot(t, snapshot)
 	runner := &fakeRunner{
 		handler: func(command Command) (string, error) {
-			if command.Args[0] == "has-session" {
-				if strings.Contains(command.Args[2], "existing") {
+			switch command.Args[0] {
+			case "has-session":
+				if command.Args[2] == "=existing" {
 					return "", nil
 				}
 				return "", errors.New("missing")
+			case "new-session":
+				if command.Args[3] == "broken" {
+					return "", errors.New("creation failure")
+				}
+				return "", nil
+			default:
+				return "", fmt.Errorf("unexpected tmux command: %#v", command)
 			}
-			if command.Args[0] == "respawn-window" && strings.Contains(command.Args[3], "broken") {
-				return "", errors.New("window failure")
-			}
-			return "", nil
 		},
 	}
+	stderr := &strings.Builder{}
 	app := testApp(runner, t.TempDir())
-	err := app.restoreSnapshot(context.Background(), file)
-	if err == nil {
+	app.Stderr = stderr
+	t.Setenv("TMUX", "")
+	if err := app.restoreSnapshot(context.Background(), file); err == nil {
 		t.Fatal("restore unexpectedly succeeded")
 	}
 	commands := runner.Commands()
 	if commandHas(commands, "tmux", "new-session", "-d", "-s", "existing", "-c", dir) {
 		t.Fatal("existing session was recreated")
 	}
+	if commandHas(commands, "tmux", "new-session", "-d", "-s", "gone", "-c", missing) {
+		t.Fatal("missing-directory session was created")
+	}
 	if !commandHas(commands, "tmux", "new-session", "-d", "-s", "later", "-c", dir) {
-		t.Fatal("later session was not restored after failure")
+		t.Fatalf("later session was not restored after failure: %#v", commands)
 	}
-	if !commandHas(commands, "tmux", "kill-session", "-t", "=broken") {
-		t.Fatal("failed session was not rolled back")
+	for _, command := range commands {
+		if command.Args[0] == "kill-session" {
+			t.Fatalf("failed session was rolled back instead of left alone: %#v", commands)
+		}
 	}
-	if commandHas(commands, "tmux", "attach-session", "-t", "=existing") {
-		t.Fatal("existing attached session was unexpectedly attached")
+	if !strings.Contains(stderr.String(), `session "gone" path does not exist, skipping`) {
+		t.Fatalf("missing-directory warning not reported: %q", stderr.String())
 	}
 }
 
-func TestRestoreSwitchesInsideTmuxAndAttachesOutside(t *testing.T) {
+func TestRestoreAttachesLastNewlyRestoredAttachedSession(t *testing.T) {
 	dir := t.TempDir()
 	snapshot := Snapshot{
-		Version:  1,
-		Sessions: []Session{{Name: "work", Path: dir, Attached: true, Windows: []Window{{Index: 0, Path: dir}}}},
+		Version: 2,
+		Sessions: []Session{
+			{Name: "first", Path: dir, Attached: true},
+			{Name: "last", Path: dir, Attached: true},
+		},
 	}
 	file := writeTestSnapshot(t, snapshot)
 	for _, test := range []struct {
-		name     string
-		tmux     string
-		expected []string
-		attached bool
+		name        string
+		tmux        string
+		command     string
+		interactive bool
 	}{
-		{name: "inside", tmux: "/tmp/client,1", expected: []string{"switch-client", "-t", "=work"}},
-		{name: "outside", expected: []string{"attach-session", "-t", "=work"}, attached: true},
+		{name: "inside tmux", tmux: "/tmp/client,1", command: "switch-client"},
+		{name: "outside tmux", command: "attach-session", interactive: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Setenv("TMUX", test.tmux)
-			if !test.attached {
-				t.Setenv("TMUX", "/tmp/client,1")
-			} else {
-				t.Setenv("TMUX", "")
-			}
 			runner := &fakeRunner{
 				handler: func(command Command) (string, error) {
 					if command.Args[0] == "has-session" {
@@ -399,14 +422,16 @@ func TestRestoreSwitchesInsideTmuxAndAttachesOutside(t *testing.T) {
 				t.Fatal(err)
 			}
 			commands := runner.Commands()
-			if !commandHas(commands, "tmux", test.expected...) {
+			if !commandHas(commands, "tmux", test.command, "-t", "=last") {
 				t.Fatalf("missing final client command: %#v", commands)
 			}
-			if test.attached {
-				for _, command := range commands {
-					if command.Args[0] == "attach-session" && !command.Interactive {
-						t.Fatal("attach-session was not interactive")
-					}
+			if commandHas(commands, "tmux", "switch-client", "-t", "=first") ||
+				commandHas(commands, "tmux", "attach-session", "-t", "=first") {
+				t.Fatalf("attached selection did not use the last restored session: %#v", commands)
+			}
+			for _, command := range commands {
+				if command.Args[0] == "attach-session" && command.Interactive != test.interactive {
+					t.Fatalf("attach interaction: got %t, want %t", command.Interactive, test.interactive)
 				}
 			}
 		})
