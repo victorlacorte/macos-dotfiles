@@ -3,6 +3,7 @@ package mdview_test
 import (
 	"bytes"
 	"context"
+	htmllib "html"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,7 +22,7 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 	}
 
 	root := t.TempDir()
-	sourceDir := filepath.Join(root, "source with spaces and Unicode é")
+	sourceDir := filepath.Join(root, "source with spaces & Unicode é")
 	outputDir := filepath.Join(root, "output with spaces")
 	if err := os.Mkdir(sourceDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -32,6 +33,14 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 
 	input := filepath.Join(sourceDir, "representative.md")
 	copyFile(t, filepath.Join(dataDir, "test", "fixtures", "representative.md"), input)
+	canonicalInput, err := filepath.Abs(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonicalInput, err = filepath.EvalSymlinks(canonicalInput)
+	if err != nil {
+		t.Fatal(err)
+	}
 	copyFile(t, filepath.Join(dataDir, "test", "fixtures", "local-image.svg"), filepath.Join(sourceDir, "local-image.svg"))
 	output := filepath.Join(outputDir, "representative preview.html")
 
@@ -64,11 +73,11 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 		t.Fatalf("stdout = %q, want %q", got, resolvedOutput)
 	}
 
-	html := string(readFile(t, output))
+	renderedHTML := string(readFile(t, output))
 	for _, needle := range []string{
 		"<!DOCTYPE html>",
 		"<style>",
-		".table-scroll",
+		`.table-scroll`,
 		"--tw-prose-body",
 		"data:image/svg+xml",
 		`data-pos="`,
@@ -84,7 +93,7 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 		"div.sourceCode",
 		"&lt;span",
 	} {
-		if !strings.Contains(html, needle) {
+		if !strings.Contains(renderedHTML, needle) {
 			t.Errorf("rendered HTML missing %q", needle)
 		}
 	}
@@ -93,16 +102,16 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 		"local-image.svg",
 		`<span class="unsafe">raw HTML`,
 	} {
-		if strings.Contains(html, needle) {
+		if strings.Contains(renderedHTML, needle) {
 			t.Errorf("rendered HTML unexpectedly contains %q", needle)
 		}
 	}
 
-	if got := len(regexp.MustCompile(`<script[^>]*src=`).FindAllString(html, -1)); got != 1 {
+	if got := len(regexp.MustCompile(`<script[^>]*src=`).FindAllString(renderedHTML, -1)); got != 1 {
 		t.Errorf("external script count = %d, want 1", got)
 	}
 	mermaidURL := "https://cdn.jsdelivr.net/npm/mermaid@11.12.1/dist/mermaid.min.js"
-	if got := len(regexp.MustCompile(regexp.QuoteMeta(mermaidURL)).FindAllString(html, -1)); got != 1 {
+	if got := len(regexp.MustCompile(regexp.QuoteMeta(mermaidURL)).FindAllString(renderedHTML, -1)); got != 1 {
 		t.Errorf("Mermaid URL count = %d, want 1", got)
 	}
 
@@ -115,9 +124,28 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 		{name: "explicit heading data-pos", regex: `<h2 data-pos="[^"]*" id="explicit-heading"`},
 		{name: "repeated heading data-pos", regex: `<h2 data-pos="[^"]*" id="repeated-heading"`},
 	} {
-		if !regexp.MustCompile(test.regex).MatchString(html) {
+		if !regexp.MustCompile(test.regex).MatchString(renderedHTML) {
 			t.Errorf("%s: no match for %s", test.name, test.regex)
 		}
+	}
+
+	bannerRe := regexp.MustCompile(
+		`<div class="[^"]*\bdocument-source\b[^"]*\bnot-prose\b[^"]*" data-source-path="([^"]*)"[^>]*>\s*Source:\s*<code[^>]*>([^<]*)</code>`,
+	)
+	bannerMatch := bannerRe.FindStringSubmatch(renderedHTML)
+	if bannerMatch == nil {
+		t.Fatal("document source banner not found")
+	}
+	if strings.Contains(canonicalInput, "&") && !strings.Contains(bannerMatch[0], "&amp;") {
+		t.Error("document source banner should HTML-escape & in the path")
+	}
+	attrPath := htmllib.UnescapeString(bannerMatch[1])
+	codePath := htmllib.UnescapeString(bannerMatch[2])
+	if attrPath != canonicalInput {
+		t.Errorf("data-source-path = %q, want %q", attrPath, canonicalInput)
+	}
+	if codePath != canonicalInput {
+		t.Errorf("banner code path = %q, want %q", codePath, canonicalInput)
 	}
 
 	temps, err := filepath.Glob(filepath.Join(outputDir, "*.tmp.*"))

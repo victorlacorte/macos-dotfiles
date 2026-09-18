@@ -72,14 +72,18 @@ are parsed by that version. `filters` is the Pandoc defaults-file key for the
 Lua filter, even though the corresponding command-line option is
 `--lua-filter`.
 
-The filter in `pandoc/filters/md-view.lua` has three responsibilities:
+The filter in `pandoc/filters/md-view.lua` has four responsibilities:
 
-1. It changes fenced code blocks with the `mermaid` class into safe `.mermaid`
+1. It prepends a `.document-source` banner with a `Source:` label and the
+   canonical input path as code-formatted visible text. The same path is stored
+   on the banner in `data-source-path`. Rendered HTML therefore exposes the
+   local canonical path of the Markdown file (treat exported HTML accordingly).
+2. It changes fenced code blocks with the `mermaid` class into safe `.mermaid`
    containers whose source text is escaped by Pandoc's HTML writer. Their
    identifier, classes, safe data/ARIA attributes, and `data-pos` are kept.
-2. It wraps each semantic Pandoc table in `.table-scroll` while retaining the
+3. It wraps each semantic Pandoc table in `.table-scroll` while retaining the
    original table, caption, alignment, and source metadata.
-3. Because Pandoc can represent disabled raw HTML tags as raw inline/block
+4. Because Pandoc can represent disabled raw HTML tags as raw inline/block
    nodes, it converts those nodes to ordinary text before HTML writing. This
    prevents source HTML from becoming live markup.
 
@@ -111,7 +115,8 @@ make build-md-view-css
 
 `make test` compiles again into a temp file and fails if the committed CSS
 differs. The result uses a 76rem container, the system sans stack, GitHub-like
-link colors, and the md-view rules for wide tables, Mermaid, callouts,
+link colors, and the md-view rules for the document source banner, wide
+tables, Mermaid, callouts,
 dark-mode code spans, and print. Pandoc still injects its own highlight
 stylesheet. Dark mode overrides those span colors here, rather than setting
 `highlight-style` in the defaults file.
@@ -150,7 +155,8 @@ concrete-syntax parser alongside Pandoc.
 
 Unit tests cover parsing, argument order, quoting, atomic failure behavior, and
 browser-launch rules. An integration test renders the representative fixture
-with real Pandoc and checks source positions, table structure, Mermaid source,
+with real Pandoc and checks the document source banner (`Source:`, code-formatted
+path, `data-source-path`), source positions, table structure, Mermaid source,
 embedded CSS, embedded local images, raw-HTML handling, and the pinned
 external script.
 

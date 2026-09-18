@@ -82,3 +82,21 @@ function Table(el)
   end
   return pandoc.Div({ el }, pandoc.Attr("", { "table-scroll" }, attributes))
 end
+
+function Pandoc(doc)
+  local source_path = PANDOC_STATE.input_files and PANDOC_STATE.input_files[1]
+  if not source_path or source_path == "" then
+    return nil
+  end
+
+  local banner = pandoc.Div(
+    { pandoc.Plain({
+        pandoc.Str("Source:"),
+        pandoc.Space(),
+        pandoc.Code(source_path),
+      }) },
+    pandoc.Attr("", { "document-source", "not-prose" }, { ["data-source-path"] = source_path })
+  )
+  table.insert(doc.blocks, 1, banner)
+  return doc
+end
