@@ -53,9 +53,9 @@ return {
       'helm',
       'templ',
 
-      'swift',
-
       'c_sharp',
+      'python',
+      'swift',
     }
 
     ts.install(ensure_installed)
