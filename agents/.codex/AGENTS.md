@@ -1,3 +1,7 @@
+Read and follow the instructions in `~/AGENTS.md`. These instructions apply in
+addition to the rules in this file; where they conflict, this file takes
+precedence.
+
 Codex uses the versioned `general` profile to grant the sandbox permission
 needed to persist Plan Mode handoffs in `~/.codex/plans/`. The profile overlays
 the private `~/.codex/config.toml`; it does not replace or manage that file.
@@ -34,3 +38,7 @@ The saved plan must be self-contained for a fresh agent and include, when applic
 - unresolved blockers.
 
 If the file cannot be created, clearly report the failure instead of claiming the plan was persisted.
+
+## Subagent Selection
+
+When asked to spawn subagents, always spawn Luna Max (gpt-5.6-luna with max reasoning) agents unless the user explicitly requests a different agent type.
