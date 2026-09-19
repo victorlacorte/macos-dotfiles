@@ -74,10 +74,12 @@ Lua filter, even though the corresponding command-line option is
 
 The filter in `pandoc/filters/md-view.lua` has four responsibilities:
 
-1. It prepends a `.document-source` banner with a `Source:` label and the
-   canonical input path as code-formatted visible text. The same path is stored
-   on the banner in `data-source-path`. Rendered HTML therefore exposes the
-   local canonical path of the Markdown file (treat exported HTML accordingly).
+1. It prepends a `.document-source` banner with a `Source:` label, the
+   canonical input path as code-formatted visible text, and a copy button. The
+   banner stores the path in `data-source-path`; the button copies that exact
+   value without the visible `Source:` label. Rendered HTML therefore exposes
+   the local canonical path of the Markdown file (treat exported HTML
+   accordingly).
 2. It changes fenced code blocks with the `mermaid` class into safe `.mermaid`
    containers whose source text is escaped by Pandoc's HTML writer. Their
    identifier, classes, safe data/ARIA attributes, and `data-pos` are kept.
@@ -87,10 +89,14 @@ The filter in `pandoc/filters/md-view.lua` has four responsibilities:
    nodes, it converts those nodes to ordinary text before HTML writing. This
    prevents source HTML from becoming live markup.
 
-The defaults file embeds the stylesheet, CSS, and local images into one
-standalone HTML document. Relative resources are resolved from the source
-file's directory, even though the output is elsewhere. The only intentional
-external resource is the exact Mermaid browser bundle:
+The defaults file embeds the stylesheet, static includes, and local images into
+one standalone HTML document. Relative resources are resolved from the source
+file's directory, even though the output is elsewhere. The dependency-free
+`pandoc/includes/source-copy.html` script connects the banner button to the
+clipboard. It reports `Source copied to clipboard.` after a successful write
+and `Could not copy source.` if clipboard access is unavailable or the write
+fails. Both messages appear in a small status toast at the top right. The only
+intentional external resource is the exact Mermaid browser bundle:
 
 ```text
 https://cdn.jsdelivr.net/npm/mermaid@11.12.1/dist/mermaid.min.js

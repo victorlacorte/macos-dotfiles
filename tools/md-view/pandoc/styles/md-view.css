@@ -483,6 +483,9 @@ body {
   }
 }
 .document-source {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   margin: 0 0 1.25rem;
   padding: 0.4rem 0.65rem;
   font-size: 0.8125rem;
@@ -493,11 +496,82 @@ body {
   border-radius: 0.375rem;
   overflow-wrap: anywhere;
 }
+.document-source__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.document-source__text code {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.source-copy-button {
+  display: inline-flex;
+  flex: 0 0 2rem;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 0.25rem;
+  cursor: pointer;
+}
+.source-copy-button:hover {
+  background: #eaeef2;
+}
+.source-copy-button:focus-visible {
+  outline: 2px solid #0969da;
+  outline-offset: 2px;
+}
+.source-copy-button svg {
+  display: block;
+  width: 1rem;
+  height: 1rem;
+}
+.source-copy-status {
+  position: fixed;
+  z-index: 1000;
+  top: 1rem;
+  right: 1rem;
+  max-width: calc(100vw - 2rem);
+  padding: 0.5rem 0.75rem;
+  color: #1f2328;
+  background: #f6f8fa;
+  border: 1px solid #d0d7de;
+  border-radius: 0.375rem;
+  box-shadow: 0 2px 8px rgb(31 35 40 / 16%);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+.source-copy-status[hidden] {
+  display: none;
+}
+.source-copy-status[data-state="error"] {
+  color: #9a1d1d;
+  background: #fff1f0;
+  border-color: #ff8b82;
+}
 @media (prefers-color-scheme: dark) {
   .document-source {
     color: #8b949e;
     background: #161b22;
     border-color: #30363d;
+  }
+  .source-copy-button:hover {
+    background: #30363d;
+  }
+  .source-copy-status {
+    color: #e6edf3;
+    background: #161b22;
+    border-color: #30363d;
+  }
+  .source-copy-status[data-state="error"] {
+    color: #ffdcd7;
+    background: #4a1d16;
+    border-color: #8b3a32;
   }
 }
 .table-scroll {
@@ -599,6 +673,9 @@ body {
   }
 }
 @media print {
+  .source-copy-button, .source-copy-status {
+    display: none !important;
+  }
   body {
     max-width: none;
     padding: 0;

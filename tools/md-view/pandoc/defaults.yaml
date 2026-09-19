@@ -7,5 +7,6 @@ filters:
   - pandoc/filters/md-view.lua
 include-in-header:
   - pandoc/includes/mermaid.html
+  - pandoc/includes/source-copy.html
 css:
   - pandoc/styles/md-view.css

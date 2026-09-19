@@ -130,22 +130,101 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 	}
 
 	bannerRe := regexp.MustCompile(
-		`<div class="[^"]*\bdocument-source\b[^"]*\bnot-prose\b[^"]*" data-source-path="([^"]*)"[^>]*>\s*Source:\s*<code[^>]*>([^<]*)</code>`,
+		`(?s)<div class="[^"]*\bdocument-source\b[^"]*\bnot-prose\b[^"]*" data-source-path="([^"]*)"[^>]*>(.*?)</div>`,
 	)
 	bannerMatch := bannerRe.FindStringSubmatch(renderedHTML)
 	if bannerMatch == nil {
 		t.Fatal("document source banner not found")
 	}
-	if strings.Contains(canonicalInput, "&") && !strings.Contains(bannerMatch[0], "&amp;") {
-		t.Error("document source banner should HTML-escape & in the path")
+	for _, fragment := range []string{" ", "&", "é"} {
+		if !strings.Contains(canonicalInput, fragment) {
+			t.Fatalf("canonical input %q does not exercise path fragment %q", canonicalInput, fragment)
+		}
+	}
+
+	escapedCanonicalInput := htmllib.EscapeString(canonicalInput)
+	if bannerMatch[1] != escapedCanonicalInput {
+		t.Errorf("raw data-source-path = %q, want escaped path %q", bannerMatch[1], escapedCanonicalInput)
+	}
+	contentMatch := regexp.MustCompile(`(?s)<span(?:\s[^>]*)?>\s*Source:\s*<code[^>]*>([^<]*)</code>\s*</span>`).
+		FindStringSubmatch(bannerMatch[2])
+	if contentMatch == nil {
+		t.Fatal("source label and code-formatted path not found in banner span")
+	}
+	codePathEscaped := contentMatch[1]
+	if codePathEscaped != escapedCanonicalInput {
+		t.Errorf("raw banner code path = %q, want escaped path %q", codePathEscaped, escapedCanonicalInput)
 	}
 	attrPath := htmllib.UnescapeString(bannerMatch[1])
-	codePath := htmllib.UnescapeString(bannerMatch[2])
+	codePath := htmllib.UnescapeString(codePathEscaped)
 	if attrPath != canonicalInput {
 		t.Errorf("data-source-path = %q, want %q", attrPath, canonicalInput)
 	}
 	if codePath != canonicalInput {
 		t.Errorf("banner code path = %q, want %q", codePath, canonicalInput)
+	}
+
+	buttonMatch := regexp.MustCompile(`(?s)<button\b([^>]*)>(.*?)</button>`).FindStringSubmatch(bannerMatch[2])
+	if buttonMatch == nil {
+		t.Fatal("native source-copy button not found in banner")
+	}
+	for _, attribute := range []string{`type="button"`, `aria-label="Copy source path"`} {
+		if !strings.Contains(buttonMatch[1], attribute) {
+			t.Errorf("source-copy button missing %s", attribute)
+		}
+	}
+	svgTag := regexp.MustCompile(`<svg\b([^>]*)>`).FindStringSubmatch(buttonMatch[2])
+	if svgTag == nil {
+		t.Fatal("source-copy button should contain its SVG icon")
+	}
+	for _, attribute := range []string{`aria-hidden="true"`, `viewBox="0 0 256 256"`} {
+		if !strings.Contains(svgTag[1], attribute) {
+			t.Errorf("source-copy SVG missing %s", attribute)
+		}
+	}
+
+	statusTag := regexp.MustCompile(`<output\b([^>]*)>`).FindStringSubmatch(bannerMatch[2])
+	if statusTag == nil {
+		t.Fatal("source-copy status output not found in banner")
+	}
+	for _, attribute := range []string{`role="status"`, `aria-live="polite"`, `aria-atomic="true"`} {
+		if !strings.Contains(statusTag[1], attribute) {
+			t.Errorf("source-copy status output missing %s", attribute)
+		}
+	}
+	if !regexp.MustCompile(`(?:^|\s)hidden(?:\s|=|$)`).MatchString(statusTag[1]) {
+		t.Error("source-copy status output should be hidden initially")
+	}
+
+	var sourceCopyScript string
+	for _, script := range regexp.MustCompile(`(?s)<script\b([^>]*)>(.*?)</script>`).FindAllStringSubmatch(renderedHTML, -1) {
+		if strings.Contains(script[2], "navigator.clipboard") && strings.Contains(script[2], "dataset.sourcePath") {
+			if regexp.MustCompile(`(?i)\bsrc\s*=`).MatchString(script[1]) {
+				t.Error("source-copy script should be inline")
+			}
+			sourceCopyScript = script[2]
+			break
+		}
+	}
+	if sourceCopyScript == "" {
+		t.Fatal("inline source-copy script reading data-source-path not found")
+	}
+	for _, message := range []string{"Source copied to clipboard.", "Could not copy source."} {
+		if !strings.Contains(sourceCopyScript, message) {
+			t.Errorf("source-copy script missing exact feedback message %q", message)
+		}
+	}
+	writeCall := regexp.MustCompile(`navigator\.clipboard\.writeText\s*\(\s*([A-Za-z_$][A-Za-z0-9_$]*(?:\.dataset\.sourcePath)?)\s*\)`).
+		FindStringSubmatch(sourceCopyScript)
+	if writeCall == nil {
+		t.Fatal("source-copy script should call navigator.clipboard.writeText with the source path")
+	}
+	clipboardInput := writeCall[1]
+	if !strings.HasSuffix(clipboardInput, ".dataset.sourcePath") {
+		assignment := regexp.MustCompile(`(?:const|let|var)\s+` + regexp.QuoteMeta(clipboardInput) + `\s*=\s*[A-Za-z_$][A-Za-z0-9_$]*\.dataset\.sourcePath\b`)
+		if !assignment.MatchString(sourceCopyScript) {
+			t.Errorf("navigator.clipboard.writeText input %q is not read from banner.dataset.sourcePath", clipboardInput)
+		}
 	}
 
 	temps, err := filepath.Glob(filepath.Join(outputDir, "*.tmp.*"))

@@ -1,0 +1,77 @@
+<script>
+(function () {
+  "use strict";
+
+  function bindSourceCopy() {
+    var banners = document.querySelectorAll(".document-source[data-source-path]");
+    Array.prototype.forEach.call(banners, function (banner) {
+      var button = banner.querySelector(".source-copy-button");
+      var status = banner.querySelector(".source-copy-status");
+      if (!button || !status) {
+        return;
+      }
+
+      var hideTimer = null;
+      var latestRequest = 0;
+
+      function showStatus(message, isError) {
+        status.hidden = false;
+        if (isError) {
+          status.dataset.state = "error";
+        } else {
+          delete status.dataset.state;
+        }
+        status.textContent = message;
+
+        if (hideTimer !== null) {
+          window.clearTimeout(hideTimer);
+        }
+        hideTimer = window.setTimeout(function () {
+          status.hidden = true;
+          status.textContent = "";
+          delete status.dataset.state;
+          hideTimer = null;
+        }, 2000);
+      }
+
+      button.addEventListener("click", function () {
+        latestRequest += 1;
+        var request = latestRequest;
+
+        if (hideTimer !== null) {
+          window.clearTimeout(hideTimer);
+          hideTimer = null;
+        }
+        status.hidden = true;
+        status.textContent = "";
+        delete status.dataset.state;
+
+        try {
+          if (!navigator.clipboard || typeof navigator.clipboard.writeText !== "function") {
+            showStatus("Could not copy source.", true);
+            return;
+          }
+
+          navigator.clipboard.writeText(banner.dataset.sourcePath).then(function () {
+            if (request === latestRequest) {
+              showStatus("Source copied to clipboard.", false);
+            }
+          }).catch(function () {
+            if (request === latestRequest) {
+              showStatus("Could not copy source.", true);
+            }
+          });
+        } catch (error) {
+          showStatus("Could not copy source.", true);
+        }
+      });
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bindSourceCopy, { once: true });
+  } else {
+    bindSourceCopy();
+  }
+}());
+</script>
