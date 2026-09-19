@@ -47,11 +47,6 @@ if command_exists brew; then
   fi
 fi
 
-# NOTE it seems bash_completion already provides Git completion
-# if [ -f "$HOME/.config/git/git-completion.bash" ]; then
-#   . "$HOME/.config/git/git-completion.bash"
-# fi
-
 eval "$(~/.local/bin/mise activate bash)"
 
 # if command_exists oh-my-posh; then
