@@ -23,6 +23,7 @@ install-md-view:
 	install -m 644 tools/md-view/pandoc/filters/md-view.lua "$(HOME)/.local/share/md-view/pandoc/filters/md-view.lua"
 	install -m 644 tools/md-view/pandoc/includes/mermaid.html "$(HOME)/.local/share/md-view/pandoc/includes/mermaid.html"
 	install -m 644 tools/md-view/pandoc/includes/source-copy.html "$(HOME)/.local/share/md-view/pandoc/includes/source-copy.html"
+	install -m 644 tools/md-view/pandoc/includes/theme-switcher.html "$(HOME)/.local/share/md-view/pandoc/includes/theme-switcher.html"
 	install -m 644 tools/md-view/pandoc/styles/md-view.css "$(HOME)/.local/share/md-view/pandoc/styles/md-view.css"
 
 tools/md-view/node_modules: tools/md-view/package.json tools/md-view/package-lock.json
