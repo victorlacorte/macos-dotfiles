@@ -8,5 +8,6 @@ filters:
 include-in-header:
   - pandoc/includes/mermaid.html
   - pandoc/includes/source-copy.html
+  - pandoc/includes/theme-switcher.html
 css:
   - pandoc/styles/md-view.css

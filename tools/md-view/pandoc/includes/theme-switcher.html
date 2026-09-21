@@ -1,0 +1,57 @@
+<script>
+(function () {
+  "use strict";
+
+  const defaultTheme = "cool";
+  const supportedThemes = ["cool", "warm"];
+  var root = document.documentElement;
+
+  function isSupportedTheme(theme) {
+    return supportedThemes.indexOf(theme) !== -1;
+  }
+
+  function updatePressedStates(theme) {
+    var buttons = document.querySelectorAll(".md-view-theme-switcher [data-theme]");
+    Array.prototype.forEach.call(buttons, function (button) {
+      var buttonTheme = button.getAttribute("data-theme");
+      button.setAttribute("aria-pressed", buttonTheme === theme ? "true" : "false");
+    });
+  }
+
+  function setTheme(theme) {
+    if (!root || !isSupportedTheme(theme)) {
+      return;
+    }
+
+    root.setAttribute("data-md-view-theme", theme);
+    updatePressedStates(theme);
+  }
+
+  function bindThemeSwitcher() {
+    var buttons = document.querySelectorAll(".md-view-theme-switcher [data-theme]");
+    Array.prototype.forEach.call(buttons, function (button) {
+      if (!isSupportedTheme(button.getAttribute("data-theme"))) {
+        return;
+      }
+
+      button.addEventListener("click", function () {
+        setTheme(button.getAttribute("data-theme"));
+      });
+    });
+
+    var currentTheme = root.getAttribute("data-md-view-theme");
+    if (!isSupportedTheme(currentTheme)) {
+      currentTheme = defaultTheme;
+    }
+    updatePressedStates(currentTheme);
+  }
+
+  setTheme(defaultTheme);
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bindThemeSwitcher, { once: true });
+  } else {
+    bindThemeSwitcher();
+  }
+}());
+</script>

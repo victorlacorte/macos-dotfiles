@@ -72,20 +72,27 @@ are parsed by that version. `filters` is the Pandoc defaults-file key for the
 Lua filter, even though the corresponding command-line option is
 `--lua-filter`.
 
-The filter in `pandoc/filters/md-view.lua` has four responsibilities:
+The filter in `pandoc/filters/md-view.lua` has five responsibilities:
 
-1. It prepends a `.document-source` banner with a `Source:` label, the
-   canonical input path as code-formatted visible text, and a copy button. The
-   banner stores the path in `data-source-path`; the button copies that exact
-   value without the visible `Source:` label. Rendered HTML therefore exposes
-   the local canonical path of the Markdown file (treat exported HTML
-   accordingly).
-2. It changes fenced code blocks with the `mermaid` class into safe `.mermaid`
+1. It adds a semantic application `<header>` and a separate `.document-source`
+   banner through Pandoc's `include-before` content, before an optional YAML
+   title block, preserving any user-provided `include-before` blocks after the
+   app controls. The header contains the top-right `.md-view-theme-switcher`.
+   The banner contains the source path, copy button, and copy status. The
+   visible path stays on one line and truncates with an ellipsis when space is
+   short; its `title` and the `.document-source[data-source-path]` attribute
+   retain the full canonical input path. The copy button writes that exact
+   path to the clipboard. Rendered HTML therefore exposes the local canonical
+   path of the Markdown file (treat exported HTML accordingly).
+2. It wraps the Markdown blocks in `.document-content` as a structural
+   boundary. The wrapper keeps each source-backed child and its `data-pos`
+   attributes intact.
+3. It changes fenced code blocks with the `mermaid` class into safe `.mermaid`
    containers whose source text is escaped by Pandoc's HTML writer. Their
    identifier, classes, safe data/ARIA attributes, and `data-pos` are kept.
-3. It wraps each semantic Pandoc table in `.table-scroll` while retaining the
+4. It wraps each semantic Pandoc table in `.table-scroll` while retaining the
    original table, caption, alignment, and source metadata.
-4. Because Pandoc can represent disabled raw HTML tags as raw inline/block
+5. Because Pandoc can represent disabled raw HTML tags as raw inline/block
    nodes, it converts those nodes to ordinary text before HTML writing. This
    prevents source HTML from becoming live markup.
 
@@ -95,8 +102,11 @@ file's directory, even though the output is elsewhere. The dependency-free
 `pandoc/includes/source-copy.html` script connects the banner button to the
 clipboard. It reports `Source copied to clipboard.` after a successful write
 and `Could not copy source.` if clipboard access is unavailable or the write
-fails. Both messages appear in a small status toast at the top right. The only
-intentional external resource is the exact Mermaid browser bundle:
+fails. Both messages appear in a small status toast at the top right. The
+`pandoc/includes/theme-switcher.html` script sets the default dark palette
+before body rendering, then binds the two theme buttons without saving a
+preference. The only intentional external resource is the exact Mermaid
+browser bundle:
 
 ```text
 https://cdn.jsdelivr.net/npm/mermaid@11.12.1/dist/mermaid.min.js
@@ -113,6 +123,41 @@ which is the file Pandoc embeds and `make install-md-view` copies. Pandoc writes
 plain HTML, so the source file applies the `prose` styles to `body` instead of
 stamping utility classes onto the document.
 
+## Dark themes and reading measure
+
+Dark mode has two temporary neutral palette options. Cool uses Tailwind gray
+and is the default every time a preview loads. Warm uses Tailwind stone. The
+snowflake selects Cool and the sun selects Warm. The switcher sits at the top
+right of the application header, above the separate source banner. It only
+appears when the system requests dark mode, and is hidden in light mode and
+print. The inline `pandoc/includes/theme-switcher.html` script sets the page's
+`data-md-view-theme` attribute before body rendering. Its `defaultTheme`
+constant is the place to change the default. The stylesheet also falls back to
+Cool if the script does not run. Theme choice is not saved, so reloads return
+to Cool.
+
+The dark palettes share semantic roles for page background, body and heading
+text, muted content, raised surfaces, borders, links, focus, feedback, and code
+syntax. Both use Tailwind sky-300 for links and focus. Prose, the app header,
+source banner, tables, code, callouts, Mermaid containers, and feedback use
+those same roles. The complete page uses one centered 68ch content measure, with
+responsive horizontal gutters outside that measure. Tables, code, figures,
+Mermaid diagrams, and fenced components stay within the same measure.
+Intrinsically wide content scrolls inside its component; there are no
+full-width or other wide-layout exceptions. Dark prose uses a 1.85 line
+height; light mode keeps its existing Tailwind neutral colors and leading.
+
+The role-based colors follow the approach in
+[Tailwind Typography's dark-mode guidance](https://tailwindcss.com/blog/tailwindcss-typography-v0-5),
+[shadcn Typeset](https://ui.shadcn.com/docs/typeset) and
+[shadcn theme tokens](https://ui.shadcn.com/docs/theming), and
+[Material color roles](https://m3.material.io/styles/color/roles). Contrast
+checks use the [WCAG 2.2 minimum contrast guidance](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html).
+Material soft remains a researched, inactive direction: `#141218` surface,
+`#CAC4D0` body text at about 10.9:1 contrast, and `#E6E0E9` high-emphasis
+text. Those values are documentation only. They do not appear in the switcher
+or active CSS.
+
 Regenerate the committed CSS from the repository root after editing the source:
 
 ```sh
@@ -120,12 +165,12 @@ make build-md-view-css
 ```
 
 `make test` compiles again into a temp file and fails if the committed CSS
-differs. The result uses a 76rem container, the system sans stack, GitHub-like
-link colors, and the md-view rules for the document source banner, wide
-tables, Mermaid, callouts,
-dark-mode code spans, and print. Pandoc still injects its own highlight
-stylesheet. Dark mode overrides those span colors here, rather than setting
-`highlight-style` in the defaults file.
+differs. The result uses a centered 68ch content measure, responsive page
+gutters, a system sans stack, GitHub-like light links, and the md-view rules
+for the separate app header and source banner, ellipsized path, internally
+scrolling wide content, Mermaid, callouts, dark palettes, and print. Pandoc
+still injects its own highlight stylesheet. Dark mode overrides those span
+colors here, rather than setting `highlight-style` in the defaults file.
 
 ## Source positions and trust boundary
 
@@ -161,10 +206,12 @@ concrete-syntax parser alongside Pandoc.
 
 Unit tests cover parsing, argument order, quoting, atomic failure behavior, and
 browser-launch rules. An integration test renders the representative fixture
-with real Pandoc and checks the document source banner (`Source:`, code-formatted
-path, `data-source-path`), source positions, table structure, Mermaid source,
-embedded CSS, embedded local images, raw-HTML handling, and the pinned
-external script.
+with real Pandoc and checks the theme-only app header before the separate
+source banner, preserved `include-before` content, the YAML title and document
+content ordering, full path text/data/title values, theme initialization, the
+single-measure CSS, source positions, table structure, Mermaid and code
+content, embedded local images, raw-HTML handling, copy feedback, and the
+pinned external script.
 
 Run the Go tests from the module, or run all repository tests:
 

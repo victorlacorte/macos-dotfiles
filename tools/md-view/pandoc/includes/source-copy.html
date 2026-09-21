@@ -19,7 +19,7 @@
         if (isError) {
           status.dataset.state = "error";
         } else {
-          delete status.dataset.state;
+          status.dataset.state = "success";
         }
         status.textContent = message;
 

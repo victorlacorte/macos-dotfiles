@@ -1,5 +1,8 @@
 ---
 title: md-view representative fixture
+include-before:
+  - Existing include-before.
+  - Second include-before.
 ---
 
 # Representative Markdown Preview
