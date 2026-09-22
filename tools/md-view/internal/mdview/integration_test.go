@@ -93,6 +93,36 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 		"sequenceDiagram",
 		"Mermaid could not render this diagram",
 		"node.textContent = source",
+		"Mermaid diagram navigation",
+		"MIN_ZOOM = 0.25",
+		"MAX_ZOOM = 4",
+		`var endAligned = initialStart + initialSize - viewSize`,
+		`Math.min(initialStart, endAligned)`,
+		`Math.max(initialStart, endAligned)`,
+		`zoomOut.disabled = state.zoom <= MIN_ZOOM`,
+		`(state.zoom < 1 && nextZoom > 1)`,
+		`(state.zoom > 1 && nextZoom < 1)`,
+		`state.zoom = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM)`,
+		`button.setAttribute("aria-label", label + " Mermaid diagram")`,
+		`button.addEventListener("pointerdown"`,
+		`button.addEventListener("keydown"`,
+		`if (activatedByPointer)`,
+		`button.blur()`,
+		`svg.focus()`,
+		`viewport.className = "mermaid-viewport"`,
+		`viewport.appendChild(svg)`,
+		`panUp.disabled = !canPan`,
+		`panDown.disabled = !canPan`,
+		`panLeft.disabled = !canPan`,
+		`panRight.disabled = !canPan`,
+		`event.key === "ArrowLeft"`,
+		`window.addEventListener("beforeprint"`,
+		`window.addEventListener("afterprint"`,
+		`svg.setAttribute("tabindex", "0")`,
+		`toolbar.setAttribute("role", "toolbar")`,
+		`var generation = renderGeneration + 1`,
+		`navigationControllers = []`,
+		`generation === renderGeneration`,
 		"div.sourceCode",
 		"&lt;span",
 	} {
@@ -139,16 +169,21 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 		`(?s)\.document-content pre\s*\{[^}]*overflow-x:\s*auto;`,
 		`(?s)\.md-view-theme-switcher\s*\{[^}]*display:\s*inline-flex;`,
 		`(?s)\.table-scroll\s*\{[^}]*overflow-x:\s*auto;`,
-		`(?s)\.mermaid\s*\{[^}]*overflow-x:\s*auto;`,
+		`(?s)\.mermaid\s*\{[^}]*position:\s*relative;[^}]*overflow:\s*hidden;`,
+		`(?s)\.mermaid-viewport\s*\{[^}]*min-height:\s*9\.5rem;[^}]*overflow:\s*auto;`,
+		`(?s)\.mermaid-toolbar\s*\{[^}]*grid-template-areas:`,
+		`(?s)\.mermaid-toolbar button\s*\{[^}]*color:\s*var\(--md-view-high-emphasis\);[^}]*background:\s*var\(--md-view-page-background\);`,
 		`(?s)@media print\s*\{.*?\.document-source__path\s*\{[^}]*white-space:\s*normal;`,
 		`(?s)@media print\s*\{[^}]*\.md-view-header[^}]*display:\s*none\s*!important;`,
 		`(?s)@media print\s*\{[^}]*\.md-view-theme-switcher[^}]*display:\s*none\s*!important;`,
+		`(?s)@media print\s*\{.*?\.mermaid-toolbar\s*\{[^}]*display:\s*none;`,
 	} {
 		if !regexp.MustCompile(rule).MatchString(embeddedCSS) {
 			t.Errorf("embedded CSS missing rule %q", rule)
 		}
 	}
-	if strings.Contains(embeddedCSS, "grid-template-columns") || strings.Contains(embeddedCSS, "grid-column:") {
+	if regexp.MustCompile(`(?s)body\s*\{[^}]*grid-template-columns`).MatchString(embeddedCSS) ||
+		strings.Contains(embeddedCSS, "grid-column:") {
 		t.Error("embedded CSS should not contain the three-column reading grid or wide grid escapes")
 	}
 	if strings.Contains(embeddedCSS, "76rem") || strings.Contains(embeddedCSS, "position: sticky") {
@@ -175,6 +210,24 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 	}
 	if !strings.Contains(renderedHTML, `alt="Local fixture image"`) {
 		t.Error("embedded local image is missing its alternative text")
+	}
+
+	for _, label := range []string{
+		"Pan up",
+		"Zoom in",
+		"Pan left",
+		"Reset",
+		"Pan right",
+		"Pan down",
+		"Zoom out",
+	} {
+		needle := `createButton("` + label + `",`
+		if !strings.Contains(renderedHTML, needle) {
+			t.Errorf("rendered HTML missing control %q", label)
+		}
+	}
+	if got := strings.Count(renderedHTML, `createButton("`); got != 7 {
+		t.Errorf("control count = %d, want 7", got)
 	}
 
 	if got := len(regexp.MustCompile(`<script[^>]*src=`).FindAllString(renderedHTML, -1)); got != 1 {

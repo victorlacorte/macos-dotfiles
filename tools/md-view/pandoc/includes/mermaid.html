@@ -3,7 +3,23 @@
 (function () {
   "use strict";
 
+  var ZOOM_STEP = 1.25;
+  var MIN_ZOOM = 0.25;
+  var MAX_ZOOM = 4;
+  var PAN_STEP = 0.1;
+  var SVG_NAMESPACE = "http://www.w3.org/2000/svg";
+  var ICON_PATHS = {
+    up: "M8 12V4M4.5 7.5 8 4l3.5 3.5",
+    down: "M8 4v8m-3.5-3.5L8 12l3.5-3.5",
+    left: "M12 8H4m3.5-3.5L4 8l3.5 3.5",
+    right: "M4 8h8M8.5 4.5 12 8l-3.5 3.5",
+    zoomIn: "M7 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm3-1 3 3M7 5v4M5 7h4",
+    zoomOut: "M7 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm3-1 3 3M5 7h4",
+    reset: "M3.5 5.5A5 5 0 1 1 3 10m.5-4.5v-3m0 3h3"
+  };
   var diagrams;
+  var navigationControllers = [];
+  var renderGeneration = 0;
 
   function addError(node, message, source) {
     if (typeof source === "string") {
@@ -49,8 +65,302 @@
     return diagrams;
   }
 
+  function parseViewBox(value) {
+    if (!value) {
+      return null;
+    }
+    var parts = value.trim().split(/[\s,]+/).map(Number);
+    if (
+      parts.length !== 4 ||
+      !parts.every(isFinite) ||
+      parts[2] <= 0 ||
+      parts[3] <= 0
+    ) {
+      return null;
+    }
+    return { x: parts[0], y: parts[1], width: parts[2], height: parts[3] };
+  }
+
+  function clamp(value, minimum, maximum) {
+    return Math.min(Math.max(value, minimum), maximum);
+  }
+
+  function clampAxis(value, initialStart, initialSize, viewSize) {
+    var endAligned = initialStart + initialSize - viewSize;
+    return clamp(
+      value,
+      Math.min(initialStart, endAligned),
+      Math.max(initialStart, endAligned)
+    );
+  }
+
+  function formatNumber(value) {
+    return String(Math.round(value * 1000000) / 1000000);
+  }
+
+  function formatViewBox(viewBox) {
+    return [
+      formatNumber(viewBox.x),
+      formatNumber(viewBox.y),
+      formatNumber(viewBox.width),
+      formatNumber(viewBox.height)
+    ].join(" ");
+  }
+
+  function createIcon(pathData) {
+    var icon = document.createElementNS(SVG_NAMESPACE, "svg");
+    var path = document.createElementNS(SVG_NAMESPACE, "path");
+    icon.setAttribute("viewBox", "0 0 16 16");
+    icon.setAttribute("aria-hidden", "true");
+    icon.setAttribute("focusable", "false");
+    path.setAttribute("d", pathData);
+    icon.appendChild(path);
+    return icon;
+  }
+
+  function createButton(label, className, iconPath, action, svg) {
+    var button = document.createElement("button");
+    var activatedByPointer = false;
+    button.type = "button";
+    button.className = className;
+    button.setAttribute("aria-label", label + " Mermaid diagram");
+    button.appendChild(createIcon(iconPath));
+    button.addEventListener("pointerdown", function () {
+      activatedByPointer = true;
+    });
+    button.addEventListener("pointercancel", function () {
+      activatedByPointer = false;
+    });
+    button.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" || event.key === " ") {
+        activatedByPointer = false;
+      }
+    });
+    button.addEventListener("click", function () {
+      action();
+      if (activatedByPointer) {
+        button.blur();
+      } else {
+        svg.focus();
+      }
+      activatedByPointer = false;
+    });
+    return button;
+  }
+
+  function addNavigation(node) {
+    var svg = node.querySelector("svg");
+    if (!svg || node.querySelector(".mermaid-toolbar")) {
+      return;
+    }
+
+    var initialValue = svg.getAttribute("viewBox");
+    var initial = parseViewBox(initialValue);
+    if (!initial) {
+      return;
+    }
+
+    var state = {
+      zoom: 1,
+      viewBox: {
+        x: initial.x,
+        y: initial.y,
+        width: initial.width,
+        height: initial.height
+      }
+    };
+    var printViewBox = null;
+    var viewport = document.createElement("div");
+    viewport.className = "mermaid-viewport";
+    var toolbar = document.createElement("div");
+    toolbar.className = "mermaid-toolbar";
+    toolbar.setAttribute("role", "toolbar");
+    toolbar.setAttribute("aria-label", "Mermaid diagram navigation");
+
+    function isInitial() {
+      return (
+        state.zoom === 1 &&
+        state.viewBox.x === initial.x &&
+        state.viewBox.y === initial.y &&
+        state.viewBox.width === initial.width &&
+        state.viewBox.height === initial.height
+      );
+    }
+
+    function canPan(deltaX, deltaY) {
+      return (
+        clampAxis(
+          state.viewBox.x + deltaX,
+          initial.x,
+          initial.width,
+          state.viewBox.width
+        ) !== state.viewBox.x ||
+        clampAxis(
+          state.viewBox.y + deltaY,
+          initial.y,
+          initial.height,
+          state.viewBox.height
+        ) !== state.viewBox.y
+      );
+    }
+
+    function updateButtons() {
+      zoomIn.disabled = state.zoom >= MAX_ZOOM;
+      zoomOut.disabled = state.zoom <= MIN_ZOOM;
+      reset.disabled = isInitial();
+      panUp.disabled = !canPan(0, -state.viewBox.height * PAN_STEP);
+      panDown.disabled = !canPan(0, state.viewBox.height * PAN_STEP);
+      panLeft.disabled = !canPan(-state.viewBox.width * PAN_STEP, 0);
+      panRight.disabled = !canPan(state.viewBox.width * PAN_STEP, 0);
+    }
+
+    function applyViewBox(useInitialValue) {
+      svg.setAttribute(
+        "viewBox",
+        useInitialValue ? initialValue : formatViewBox(state.viewBox)
+      );
+      updateButtons();
+    }
+
+    function zoomTo(nextZoom) {
+      var centerX = state.viewBox.x + state.viewBox.width / 2;
+      var centerY = state.viewBox.y + state.viewBox.height / 2;
+      if (
+        (state.zoom < 1 && nextZoom > 1) ||
+        (state.zoom > 1 && nextZoom < 1)
+      ) {
+        nextZoom = 1;
+      }
+      state.zoom = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM);
+      state.viewBox.width = initial.width / state.zoom;
+      state.viewBox.height = initial.height / state.zoom;
+      state.viewBox.x = clampAxis(
+        centerX - state.viewBox.width / 2,
+        initial.x,
+        initial.width,
+        state.viewBox.width
+      );
+      state.viewBox.y = clampAxis(
+        centerY - state.viewBox.height / 2,
+        initial.y,
+        initial.height,
+        state.viewBox.height
+      );
+      applyViewBox(state.zoom === 1);
+    }
+
+    function panBy(deltaX, deltaY) {
+      if (!canPan(deltaX, deltaY)) {
+        return false;
+      }
+      var nextX = clampAxis(
+        state.viewBox.x + deltaX,
+        initial.x,
+        initial.width,
+        state.viewBox.width
+      );
+      var nextY = clampAxis(
+        state.viewBox.y + deltaY,
+        initial.y,
+        initial.height,
+        state.viewBox.height
+      );
+      state.viewBox.x = nextX;
+      state.viewBox.y = nextY;
+      applyViewBox(false);
+      return true;
+    }
+
+    function resetViewBox() {
+      state.zoom = 1;
+      state.viewBox.x = initial.x;
+      state.viewBox.y = initial.y;
+      state.viewBox.width = initial.width;
+      state.viewBox.height = initial.height;
+      applyViewBox(true);
+    }
+
+    var panUp = createButton("Pan up", "mermaid-pan-up", ICON_PATHS.up, function () {
+      panBy(0, -state.viewBox.height * PAN_STEP);
+    }, svg);
+    var zoomIn = createButton("Zoom in", "mermaid-zoom-in", ICON_PATHS.zoomIn, function () {
+      zoomTo(state.zoom * ZOOM_STEP);
+    }, svg);
+    var panLeft = createButton("Pan left", "mermaid-pan-left", ICON_PATHS.left, function () {
+      panBy(-state.viewBox.width * PAN_STEP, 0);
+    }, svg);
+    var reset = createButton("Reset", "mermaid-reset", ICON_PATHS.reset, resetViewBox, svg);
+    var panRight = createButton("Pan right", "mermaid-pan-right", ICON_PATHS.right, function () {
+      panBy(state.viewBox.width * PAN_STEP, 0);
+    }, svg);
+    var panDown = createButton("Pan down", "mermaid-pan-down", ICON_PATHS.down, function () {
+      panBy(0, state.viewBox.height * PAN_STEP);
+    }, svg);
+    var zoomOut = createButton("Zoom out", "mermaid-zoom-out", ICON_PATHS.zoomOut, function () {
+      zoomTo(state.zoom / ZOOM_STEP);
+    }, svg);
+
+    toolbar.appendChild(panUp);
+    toolbar.appendChild(zoomIn);
+    toolbar.appendChild(panLeft);
+    toolbar.appendChild(reset);
+    toolbar.appendChild(panRight);
+    toolbar.appendChild(panDown);
+    toolbar.appendChild(zoomOut);
+    svg.parentNode.insertBefore(viewport, svg);
+    viewport.appendChild(svg);
+    node.appendChild(toolbar);
+    svg.setAttribute("tabindex", "0");
+    svg.addEventListener("keydown", function (event) {
+      var moved = false;
+      if (event.key === "ArrowLeft") {
+        moved = panBy(-state.viewBox.width * PAN_STEP, 0);
+      } else if (event.key === "ArrowRight") {
+        moved = panBy(state.viewBox.width * PAN_STEP, 0);
+      } else if (event.key === "ArrowUp") {
+        moved = panBy(0, -state.viewBox.height * PAN_STEP);
+      } else if (event.key === "ArrowDown") {
+        moved = panBy(0, state.viewBox.height * PAN_STEP);
+      }
+      if (moved) {
+        event.preventDefault();
+      }
+    });
+    updateButtons();
+
+    navigationControllers.push({
+      beforePrint: function () {
+        if (printViewBox === null) {
+          printViewBox = svg.getAttribute("viewBox");
+        }
+        svg.setAttribute("viewBox", initialValue);
+      },
+      afterPrint: function () {
+        if (printViewBox !== null) {
+          svg.setAttribute("viewBox", printViewBox);
+          printViewBox = null;
+        }
+      }
+    });
+  }
+
+  window.addEventListener("beforeprint", function () {
+    navigationControllers.forEach(function (controller) {
+      controller.beforePrint();
+    });
+  });
+
+  window.addEventListener("afterprint", function () {
+    navigationControllers.forEach(function (controller) {
+      controller.afterPrint();
+    });
+  });
+
   function renderDiagrams() {
     var current = collectDiagrams();
+    var generation = renderGeneration + 1;
+    renderGeneration = generation;
+    navigationControllers = [];
     if (!current.length) {
       return;
     }
@@ -78,13 +388,23 @@
       var node = diagram.node;
       try {
         var result = window.mermaid.run({ nodes: [node] });
-        if (result && typeof result.catch === "function") {
-          result.catch(function () {
-            addError(node, "Mermaid could not render this diagram. The diagram source is shown above.", diagram.source);
+        if (result && typeof result.then === "function") {
+          result.then(function () {
+            if (generation === renderGeneration) {
+              addNavigation(node);
+            }
+          }, function () {
+            if (generation === renderGeneration) {
+              addError(node, "Mermaid could not render this diagram. The diagram source is shown above.", diagram.source);
+            }
           });
+        } else if (generation === renderGeneration) {
+          addNavigation(node);
         }
       } catch (error) {
-        addError(node, "Mermaid could not render this diagram. The diagram source is shown above.", diagram.source);
+        if (generation === renderGeneration) {
+          addError(node, "Mermaid could not render this diagram. The diagram source is shown above.", diagram.source);
+        }
       }
     });
   }

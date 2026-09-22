@@ -118,6 +118,25 @@ The static include initializes Mermaid after the document is ready, uses
 diagram independently. A bad diagram gets a visible error while the rest of
 the document remains readable.
 
+Each rendered diagram has seven lower-right controls for directional panning,
+zooming, and reset. The SVG stretches to the viewport, at least 9.5rem tall,
+so zoom and pan cover that whole area and the control grid still fits on
+shallow diagrams. Pointer activation releases focus from the selected control,
+so the toolbar returns to reduced opacity after the pointer leaves. Keyboard
+activation moves focus to the SVG, whose visible focus outline makes it ready
+for immediate arrow-key panning. The SVG is also reachable with the Tab key.
+Pan controls are disabled at their corresponding diagram boundaries, including
+all four directions at the fitted 1x view. Zooming ranges from 0.25x to 4x.
+Toolbar actions that cross the fitted scale stop at exactly 1x before
+continuing. Above 1x, pan boundaries keep the viewport inside the diagram.
+Below 1x, they keep the whole diagram visible while allowing it to move across
+the surrounding transparent space. `Reset` restores the exact initial view,
+and arrow keys pan by 10% of the visible width or height. An arrow key can
+scroll the page when the diagram cannot move farther in that direction.
+Printing temporarily restores the complete fitted diagram and returns to the
+interactive view afterward. Changing the theme redraws each diagram and resets
+its interactive view.
+
 The preview stylesheet starts as `pandoc/styles/md-view.src.css`. Tailwind CSS
 4.3.3 and `@tailwindcss/typography` compile that into `pandoc/styles/md-view.css`,
 which is the file Pandoc embeds and `make install-md-view` copies. Pandoc writes
