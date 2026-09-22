@@ -3,6 +3,8 @@
 (function () {
   "use strict";
 
+  var diagrams;
+
   function addError(node, message, source) {
     if (typeof source === "string") {
       node.textContent = source;
@@ -20,31 +22,59 @@
     node.insertAdjacentElement("afterend", error);
   }
 
-  function renderDiagrams() {
+  function mermaidTheme() {
+    return document.documentElement.getAttribute("data-md-view-theme") === "dark"
+      ? "dark"
+      : "default";
+  }
+
+  function restoreDiagram(node, source) {
+    node.classList.remove("mermaid-failed");
+    node.removeAttribute("data-processed");
+    node.textContent = source;
+    var existing = node.nextElementSibling;
+    if (existing && existing.classList.contains("mermaid-error")) {
+      existing.parentNode.removeChild(existing);
+    }
+  }
+
+  function collectDiagrams() {
+    if (diagrams) {
+      return diagrams;
+    }
     var nodes = Array.prototype.slice.call(document.querySelectorAll(".mermaid"));
-    var diagrams = nodes.map(function (node) {
+    diagrams = nodes.map(function (node) {
       return { node: node, source: node.textContent };
     });
-    if (!nodes.length) {
+    return diagrams;
+  }
+
+  function renderDiagrams() {
+    var current = collectDiagrams();
+    if (!current.length) {
       return;
     }
+
+    current.forEach(function (diagram) {
+      restoreDiagram(diagram.node, diagram.source);
+    });
+
     if (!window.mermaid || typeof window.mermaid.run !== "function") {
-      diagrams.forEach(function (diagram) {
+      current.forEach(function (diagram) {
         addError(diagram.node, "Mermaid is unavailable. The diagram source is shown above.", diagram.source);
       });
       return;
     }
 
-    var dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
     window.mermaid.initialize({
       startOnLoad: false,
       securityLevel: "strict",
-      theme: dark ? "dark" : "default",
+      theme: mermaidTheme(),
       flowchart: { useMaxWidth: true },
       sequence: { useMaxWidth: true }
     });
 
-    diagrams.forEach(function (diagram) {
+    current.forEach(function (diagram) {
       var node = diagram.node;
       try {
         var result = window.mermaid.run({ nodes: [node] });
@@ -59,10 +89,28 @@
     });
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", renderDiagrams);
-  } else {
+  function watchTheme() {
+    if (typeof MutationObserver !== "function") {
+      return;
+    }
+    var observer = new MutationObserver(function () {
+      renderDiagrams();
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-md-view-theme"]
+    });
+  }
+
+  function start() {
     renderDiagrams();
+    watchTheme();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start);
+  } else {
+    start();
   }
 }());
 </script>

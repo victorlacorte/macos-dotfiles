@@ -94,28 +94,23 @@ function Pandoc(doc)
     pandoc.Code(source_path, pandoc.Attr("", { "document-source__path" }, { title = source_path })),
   }, pandoc.Attr("", { "document-source__text" }))
 
-  local cool_theme_button = pandoc.RawInline("html", [[
-    <button class="source-theme-button" type="button" data-theme="cool" aria-label="Cool dark theme" title="Cool dark theme" aria-pressed="true">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-        <path d="M12 2v20m0-20 3 3m-3-3-3 3m3 17 3-3m-3 3-3-3M3.34 7l17.32 10M3.34 7l4.1.6M3.34 7l1.5 3.8m14.82 6.2-4.1-.6m4.1.6-1.5-3.8M3.34 17 20.66 7m-17.32 10 4.1-.6m-4.1.6 1.5-3.8m14.82-6.2-4.1.6m4.1-.6-1.5 3.8" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"></path>
-      </svg>
+  local light_theme_button = pandoc.RawInline("html", [[
+    <button class="source-theme-button" type="button" data-theme="light" aria-label="Light theme" title="Light theme" aria-pressed="false">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sun preview-icon"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
     </button>
   ]])
 
-  local warm_theme_button = pandoc.RawInline("html", [[
-    <button class="source-theme-button" type="button" data-theme="warm" aria-label="Warm dark theme" title="Warm dark theme" aria-pressed="false">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-        <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.6"></circle>
-        <path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2m-3.51-7.07-1.42 1.42m-11.3 11.3-1.42 1.42" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.6"></path>
-      </svg>
+  local dark_theme_button = pandoc.RawInline("html", [[
+    <button class="source-theme-button" type="button" data-theme="dark" aria-label="Dark theme" title="Dark theme" aria-pressed="false">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-moon preview-icon"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg>
     </button>
   ]])
 
   local theme_switcher = pandoc.Span(
-    { cool_theme_button, warm_theme_button },
+    { light_theme_button, dark_theme_button },
     pandoc.Attr("", { "md-view-theme-switcher", "not-prose" }, {
       role = "group",
-      ["aria-label"] = "Dark reading theme",
+      ["aria-label"] = "Reading theme",
     })
   )
 

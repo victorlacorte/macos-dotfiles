@@ -2,8 +2,11 @@
 (function () {
   "use strict";
 
-  const defaultTheme = "cool";
-  const supportedThemes = ["cool", "warm"];
+  const defaultTheme =
+    window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  const supportedThemes = ["light", "dark"];
   var root = document.documentElement;
 
   function isSupportedTheme(theme) {

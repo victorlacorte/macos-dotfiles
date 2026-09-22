@@ -134,12 +134,10 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 	for _, rule := range []string{
 		`(?s)\.document-source__text\s*\{[^}]*min-width:\s*0;`,
 		`(?s)\.document-source__path\s*\{[^}]*min-width:\s*0;[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;`,
-		`(?s)\.md-view-header\s*\{[^}]*display:\s*none;`,
+		`(?s)\.md-view-header\s*\{[^}]*display:\s*flex;`,
 		`(?s)\.md-view-header\s*\{[^}]*justify-content:\s*flex-end;`,
 		`(?s)\.document-content pre\s*\{[^}]*overflow-x:\s*auto;`,
-		`(?s)\.md-view-theme-switcher\s*\{\s*display:\s*none;`,
-		`(?s)@media \(prefers-color-scheme: dark\)\s*\{.*?\.md-view-header\s*\{[^}]*display:\s*flex;`,
-		`(?s)@media \(prefers-color-scheme: dark\)\s*\{.*?\.md-view-theme-switcher\s*\{[^}]*display:\s*inline-flex;`,
+		`(?s)\.md-view-theme-switcher\s*\{[^}]*display:\s*inline-flex;`,
 		`(?s)\.table-scroll\s*\{[^}]*overflow-x:\s*auto;`,
 		`(?s)\.mermaid\s*\{[^}]*overflow-x:\s*auto;`,
 		`(?s)@media print\s*\{.*?\.document-source__path\s*\{[^}]*white-space:\s*normal;`,
@@ -302,11 +300,11 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 	themeGroupMatch := regexp.MustCompile(`(?s)<span\b([^>]*\bmd-view-theme-switcher\b[^>]*)>(.*?)</span>`).
 		FindStringSubmatch(mdViewHeaderMatch[1])
 	if themeGroupMatch == nil {
-		t.Fatal("dark theme switcher group not found in the md-view header")
+		t.Fatal("theme switcher group not found in the md-view header")
 	}
 	themeGroupAttributes := themeGroupMatch[1]
 	themeGroupBody := themeGroupMatch[2]
-	for _, attribute := range []string{`role="group"`, `aria-label="Dark reading theme"`} {
+	for _, attribute := range []string{`role="group"`, `aria-label="Reading theme"`} {
 		if !strings.Contains(themeGroupAttributes, attribute) {
 			t.Errorf("theme switcher group missing %s", attribute)
 		}
@@ -315,7 +313,7 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 	if len(themeButtons) != 2 {
 		t.Fatalf("theme button count = %d, want 2", len(themeButtons))
 	}
-	expectedPressed := map[string]string{"cool": "true", "warm": "false"}
+	expectedThemeButtons := map[string]string{"light": "Light theme", "dark": "Dark theme"}
 	seenThemes := make(map[string]bool)
 	for _, button := range themeButtons {
 		themeMatch := regexp.MustCompile(`\bdata-theme="([^"]+)"`).FindStringSubmatch(button[1])
@@ -325,16 +323,16 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 		}
 		theme := themeMatch[1]
 		seenThemes[theme] = true
-		if _, ok := expectedPressed[theme]; !ok {
+		label, ok := expectedThemeButtons[theme]
+		if !ok {
 			t.Errorf("unsupported theme button value %q", theme)
 			continue
 		}
-		label := strings.ToUpper(theme[:1]) + theme[1:] + " dark theme"
 		for _, attribute := range []string{
 			`type="button"`,
 			`aria-label="` + label + `"`,
 			`title="` + label + `"`,
-			`aria-pressed="` + expectedPressed[theme] + `"`,
+			`aria-pressed="false"`,
 		} {
 			if !strings.Contains(button[1], attribute) {
 				t.Errorf("%s theme button missing %s", theme, attribute)
@@ -350,15 +348,20 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 				t.Errorf("%s theme SVG missing %s", theme, attribute)
 			}
 		}
-		if theme == "cool" && !strings.Contains(button[2], `<path`) {
-			t.Error("Cool theme button should contain the snowflake SVG")
+		if theme == "light" && !strings.Contains(button[2], `<circle`) {
+			t.Error("light theme button should contain the sun SVG circle")
 		}
-		if theme == "warm" && !strings.Contains(button[2], `<circle`) {
-			t.Error("Warm theme button should contain the sun SVG")
+		if theme == "dark" {
+			if !strings.Contains(button[2], `M20.985 12.486`) {
+				t.Error("dark theme button should contain the moon SVG path")
+			}
+			if strings.Contains(button[2], `<circle`) {
+				t.Error("dark theme button should not contain a circle")
+			}
 		}
 	}
-	if !seenThemes["cool"] || !seenThemes["warm"] {
-		t.Errorf("theme buttons = %v, want exactly cool and warm", seenThemes)
+	if !seenThemes["light"] || !seenThemes["dark"] || len(seenThemes) != 2 {
+		t.Errorf("theme buttons = %v, want exactly light and dark", seenThemes)
 	}
 
 	copyButtonMatch := regexp.MustCompile(`(?s)<button\b([^>]*class="[^"]*\bsource-copy-button\b[^"]*"[^>]*)>(.*?)</button>`).
@@ -427,7 +430,7 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 
 	var themeScript string
 	for _, script := range regexp.MustCompile(`(?s)<script\b([^>]*)>(.*?)</script>`).FindAllStringSubmatch(renderedHTML, -1) {
-		if strings.Contains(script[2], `defaultTheme = "cool"`) && strings.Contains(script[2], `data-md-view-theme`) {
+		if strings.Contains(script[2], `supportedThemes = ["light", "dark"]`) && strings.Contains(script[2], `data-md-view-theme`) {
 			if regexp.MustCompile(`(?i)\bsrc\s*=`).MatchString(script[1]) {
 				t.Error("theme script should be inline")
 			}
@@ -436,19 +439,21 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 		}
 	}
 	if themeScript == "" {
-		t.Fatal("inline dark theme initialization script not found")
+		t.Fatal("inline theme initialization script not found")
 	}
 	if themeScriptIndex := strings.Index(renderedHTML, themeScript); themeScriptIndex < 0 || themeScriptIndex > strings.Index(renderedHTML, "<body") {
 		t.Error("theme initialization script should run from the document head before body rendering")
 	}
 	for _, fragment := range []string{
-		`const defaultTheme = "cool";`,
-		`const supportedThemes = ["cool", "warm"];`,
+		`const defaultTheme =`,
+		`window.matchMedia("(prefers-color-scheme: dark)").matches`,
+		`const supportedThemes = ["light", "dark"];`,
 		`.md-view-theme-switcher [data-theme]`,
 		`return supportedThemes.indexOf(theme) !== -1;`,
 		`root.setAttribute("data-md-view-theme", theme);`,
 		`button.setAttribute("aria-pressed", buttonTheme === theme ? "true" : "false");`,
 		`button.addEventListener("click"`,
+		`setTheme(defaultTheme);`,
 	} {
 		if !strings.Contains(themeScript, fragment) {
 			t.Errorf("theme script missing %q", fragment)
@@ -456,6 +461,48 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 	}
 	if regexp.MustCompile(`(?i)\b(?:localStorage|sessionStorage|document\.cookie|fetch|XMLHttpRequest|WebSocket|EventSource)\b`).MatchString(themeScript) {
 		t.Error("theme script should not access storage, cookies, or network APIs")
+	}
+
+	srcCSS := string(readFile(t, filepath.Join(dataDir, "pandoc/styles/md-view.src.css")))
+	generatedCSS := string(readFile(t, filepath.Join(dataDir, "pandoc/styles/md-view.css")))
+	themeIdentifier := regexp.MustCompile(`(?:data-md-view-theme|data-theme)="([^"]+)"`)
+	for _, sample := range []struct {
+		name    string
+		content string
+	}{
+		{name: "rendered HTML", content: renderedHTML},
+		{name: "source stylesheet", content: srcCSS},
+		{name: "generated stylesheet", content: generatedCSS},
+	} {
+		for _, match := range themeIdentifier.FindAllStringSubmatch(sample.content, -1) {
+			if match[1] != "light" && match[1] != "dark" {
+				t.Errorf("%s has unsupported theme identifier %q", sample.name, match[1])
+			}
+		}
+		for _, leftover := range []string{
+			`data-theme="cool"`,
+			`data-theme="warm"`,
+			`data-md-view-theme="cool"`,
+			`data-md-view-theme="warm"`,
+			"--color-stone-",
+		} {
+			if strings.Contains(sample.content, leftover) {
+				t.Errorf("%s unexpectedly contains %q", sample.name, leftover)
+			}
+		}
+	}
+	for _, token := range []string{
+		"--color-gray-50",
+		"--color-gray-100",
+		"--color-gray-200",
+		"--color-sky-700",
+		"--color-green-50",
+		"--color-red-50",
+		"--color-violet-700",
+	} {
+		if !strings.Contains(generatedCSS, token) {
+			t.Errorf("generated stylesheet missing light token %q", token)
+		}
 	}
 
 	temps, err := filepath.Glob(filepath.Join(outputDir, "*.tmp.*"))

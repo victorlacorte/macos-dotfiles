@@ -103,19 +103,20 @@ file's directory, even though the output is elsewhere. The dependency-free
 clipboard. It reports `Source copied to clipboard.` after a successful write
 and `Could not copy source.` if clipboard access is unavailable or the write
 fails. Both messages appear in a small status toast at the top right. The
-`pandoc/includes/theme-switcher.html` script sets the default dark palette
-before body rendering, then binds the two theme buttons without saving a
-preference. The only intentional external resource is the exact Mermaid
-browser bundle:
+`pandoc/includes/theme-switcher.html` script sets `data-md-view-theme` from the
+system appearance before body rendering, then binds the two theme buttons
+without saving a preference. The only intentional external resource is the
+exact Mermaid browser bundle:
 
 ```text
 https://cdn.jsdelivr.net/npm/mermaid@11.12.1/dist/mermaid.min.js
 ```
 
 The static include initializes Mermaid after the document is ready, uses
-`securityLevel: "strict"`, selects a light or dark theme from the system
-preference, and handles each diagram independently. A bad diagram gets a
-visible error while the rest of the document remains readable.
+`securityLevel: "strict"`, selects Mermaid `dark` or `default` from
+`data-md-view-theme`, redraws when that attribute changes, and handles each
+diagram independently. A bad diagram gets a visible error while the rest of
+the document remains readable.
 
 The preview stylesheet starts as `pandoc/styles/md-view.src.css`. Tailwind CSS
 4.3.3 and `@tailwindcss/typography` compile that into `pandoc/styles/md-view.css`,
@@ -123,29 +124,32 @@ which is the file Pandoc embeds and `make install-md-view` copies. Pandoc writes
 plain HTML, so the source file applies the `prose` styles to `body` instead of
 stamping utility classes onto the document.
 
-## Dark themes and reading measure
+## Themes and reading measure
 
-Dark mode has two temporary neutral palette options. Cool uses Tailwind gray
-and is the default every time a preview loads. Warm uses Tailwind stone. The
-snowflake selects Cool and the sun selects Warm. The switcher sits at the top
-right of the application header, above the separate source banner. It only
-appears when the system requests dark mode, and is hidden in light mode and
-print. The inline `pandoc/includes/theme-switcher.html` script sets the page's
-`data-md-view-theme` attribute before body rendering. Its `defaultTheme`
-constant is the place to change the default. The stylesheet also falls back to
-Cool if the script does not run. Theme choice is not saved, so reloads return
-to Cool.
+Dark uses the existing Tailwind gray palette. Light uses the same families with
+the numbered steps folded so surfaces sit on the light end and text on the dark
+end. The moon selects dark. The sun selects light. The switcher sits at the top
+right of the application header, above the separate source banner. It stays
+visible in both appearances and is hidden in print.
 
-The dark palettes share semantic roles for page background, body and heading
+The inline `pandoc/includes/theme-switcher.html` script reads the system
+appearance and sets `data-md-view-theme` before the body renders. Light mode
+opens the light theme. Dark mode opens the dark theme. A later click lasts only
+until reload. Reloading reads the system preference again. The choice is not
+saved. If the script does not run, `:root` is the light palette, and a
+`prefers-color-scheme: dark` fallback applies the dark palette only while the
+attribute is unset.
+
+Light and dark share semantic roles for page background, body and heading
 text, muted content, raised surfaces, borders, links, focus, feedback, and code
-syntax. Both use Tailwind sky-300 for links and focus. Prose, the app header,
-source banner, tables, code, callouts, Mermaid containers, and feedback use
-those same roles. The complete page uses one centered 68ch content measure, with
-responsive horizontal gutters outside that measure. Tables, code, figures,
-Mermaid diagrams, and fenced components stay within the same measure.
+syntax. Dark links and focus use Tailwind sky-300. Light uses sky-700. Prose,
+the app header, source banner, tables, code, callouts, Mermaid containers, and
+feedback use those same roles. The complete page uses one centered 68ch content
+measure, with responsive horizontal gutters outside that measure. Tables, code,
+figures, Mermaid diagrams, and fenced components stay within the same measure.
 Intrinsically wide content scrolls inside its component; there are no
 full-width or other wide-layout exceptions. Dark prose uses a 1.85 line
-height; light mode keeps its existing Tailwind neutral colors and leading.
+height. Light keeps the existing prose leading.
 
 The role-based colors follow the approach in
 [Tailwind Typography's dark-mode guidance](https://tailwindcss.com/blog/tailwindcss-typography-v0-5),
@@ -166,11 +170,11 @@ make build-md-view-css
 
 `make test` compiles again into a temp file and fails if the committed CSS
 differs. The result uses a centered 68ch content measure, responsive page
-gutters, a system sans stack, GitHub-like light links, and the md-view rules
-for the separate app header and source banner, ellipsized path, internally
-scrolling wide content, Mermaid, callouts, dark palettes, and print. Pandoc
-still injects its own highlight stylesheet. Dark mode overrides those span
-colors here, rather than setting `highlight-style` in the defaults file.
+gutters, a system sans stack, and the md-view rules for the separate app header
+and source banner, ellipsized path, internally scrolling wide content, Mermaid,
+callouts, light and dark palettes, and print. Pandoc still injects its own
+highlight stylesheet. Theme tokens override those span colors here, rather than
+setting `highlight-style` in the defaults file.
 
 ## Source positions and trust boundary
 
