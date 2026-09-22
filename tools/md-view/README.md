@@ -63,16 +63,17 @@ invocation.
 Pandoc is configured by `pandoc/defaults.yaml` with this reader:
 
 ```text
-gfm+sourcepos+yaml_metadata_block+fenced_divs+bracketed_spans+attributes-raw_html
+gfm+alerts+sourcepos+yaml_metadata_block+fenced_divs+bracketed_spans+attributes-raw_html
 ```
 
-Pandoc 3.10.2 was the tested version. The planned GFM combination needed the
-small `+attributes` addition so explicit heading and fenced-code identifiers
-are parsed by that version. `filters` is the Pandoc defaults-file key for the
-Lua filter, even though the corresponding command-line option is
+Pandoc 3.10.2 was the tested version. GFM already enables alerts; the reader
+names `+alerts` explicitly anyway. The planned GFM combination also needed
+the small `+attributes` addition so explicit heading and fenced-code
+identifiers are parsed by that version. `filters` is the Pandoc defaults-file
+key for the Lua filter, even though the corresponding command-line option is
 `--lua-filter`.
 
-The filter in `pandoc/filters/md-view.lua` has five responsibilities:
+The filter in `pandoc/filters/md-view.lua` has six responsibilities:
 
 1. It adds a semantic application `<header>` and a separate `.document-source`
    banner through Pandoc's `include-before` content, before an optional YAML
@@ -92,7 +93,16 @@ The filter in `pandoc/filters/md-view.lua` has five responsibilities:
    identifier, classes, safe data/ARIA attributes, and `data-pos` are kept.
 4. It wraps each semantic Pandoc table in `.table-scroll` while retaining the
    original table, caption, alignment, and source metadata.
-5. Because Pandoc can represent disabled raw HTML tags as raw inline/block
+5. It rewrites Pandoc GitHub-style alert Divs to exclusive
+   `markdown-alert markdown-alert-<type>` containers with a
+   `markdown-alert-title`, a decorative inline SVG (`aria-hidden`,
+   `focusable="false"`), and the original identifier, attributes, body blocks,
+   and `data-pos`. Only the five GitHub types (`note`, `tip`, `important`,
+   `warning`, `caution`) whose first child is Pandoc's generated title node are
+   rewritten. Ordinary blockquotes, unknown markers, custom-title syntax,
+   fenced `::: {.note}` divs, and the generic `.callout` component stay
+   unchanged. Alerts are static notes, so they do not use `role="alert"`.
+6. Because Pandoc can represent disabled raw HTML tags as raw inline/block
    nodes, it converts those nodes to ordinary text before HTML writing. This
    prevents source HTML from becoming live markup.
 
@@ -162,9 +172,11 @@ attribute is unset.
 Light and dark share semantic roles for page background, body and heading
 text, muted content, raised surfaces, borders, links, focus, feedback, and code
 syntax. Dark links and focus use Tailwind sky-300. Light uses sky-700. Prose,
-the app header, source banner, tables, code, callouts, Mermaid containers, and
-feedback use those same roles. The complete page uses one centered 68ch content
-measure, with responsive horizontal gutters outside that measure. Tables, code,
+the app header, source banner, tables, code, callouts, GitHub-style alerts,
+Mermaid containers, and feedback use those same roles. Note, tip, and caution
+titles reuse the link, success, and error colors. Warning and important titles
+use dedicated amber and violet tokens. The complete page uses one centered 68ch
+content measure, with responsive horizontal gutters outside that measure. Tables, code,
 figures, Mermaid diagrams, and fenced components stay within the same measure.
 Intrinsically wide content scrolls inside its component; there are no
 full-width or other wide-layout exceptions. Dark prose uses a 1.85 line
@@ -191,9 +203,9 @@ make build-md-view-css
 differs. The result uses a centered 68ch content measure, responsive page
 gutters, a system sans stack, and the md-view rules for the separate app header
 and source banner, ellipsized path, internally scrolling wide content, Mermaid,
-callouts, light and dark palettes, and print. Pandoc still injects its own
-highlight stylesheet. Theme tokens override those span colors here, rather than
-setting `highlight-style` in the defaults file.
+callouts, GitHub-style alerts, light and dark palettes, and print. Pandoc still
+injects its own highlight stylesheet. Theme tokens override those span colors
+here, rather than setting `highlight-style` in the defaults file.
 
 ## Source positions and trust boundary
 
@@ -201,8 +213,8 @@ setting `highlight-style` in the defaults file.
 Pandoc emits `data-pos` attributes on source-backed headings, paragraphs,
 inline elements, lists, tables, code containers, and other elements where the
 writer has a position. The Lua filter carries the source position to Mermaid
-containers and table wrappers. These are source ranges, not persistent
-annotation IDs.
+containers, table wrappers, and GitHub-style alert containers. These are source
+ranges, not persistent annotation IDs.
 
 The input is treated as local Markdown, but source-provided raw HTML is still
 disabled and escaped. Mermaid attributes are restricted to the identifier,
@@ -233,8 +245,8 @@ with real Pandoc and checks the theme-only app header before the separate
 source banner, preserved `include-before` content, the YAML title and document
 content ordering, full path text/data/title values, theme initialization, the
 single-measure CSS, source positions, table structure, Mermaid and code
-content, embedded local images, raw-HTML handling, copy feedback, and the
-pinned external script.
+content, GitHub-style alerts, embedded local images, raw-HTML handling, copy
+feedback, and the pinned external script.
 
 Run the Go tests from the module, or run all repository tests:
 
@@ -244,6 +256,7 @@ make test
 ```
 
 The fixture intentionally includes repeated headings and phrases, lists,
-blockquote content, a fenced div, narrow and wide tables, flowchart and
-sequence Mermaid diagrams, an invalid diagram, a relative SVG, Unicode,
-source HTML, and a path containing spaces.
+blockquote content, GitHub-style alerts, an unknown alert marker, a fenced
+`.note` div, a fenced callout, narrow and wide tables, flowchart and sequence
+Mermaid diagrams, an invalid diagram, a relative SVG, Unicode, source HTML,
+and a path containing spaces.

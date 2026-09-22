@@ -1,4 +1,4 @@
-from: gfm+sourcepos+yaml_metadata_block+fenced_divs+bracketed_spans+attributes-raw_html
+from: gfm+alerts+sourcepos+yaml_metadata_block+fenced_divs+bracketed_spans+attributes-raw_html
 to: html5
 standalone: true
 embed-resources: true

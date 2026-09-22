@@ -85,6 +85,14 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 		`data-pos="`,
 		"explicit-heading",
 		"fixture-callout",
+		`class="markdown-alert markdown-alert-note"`,
+		`class="markdown-alert markdown-alert-tip"`,
+		`class="markdown-alert markdown-alert-important"`,
+		`class="markdown-alert markdown-alert-warning"`,
+		`class="markdown-alert markdown-alert-caution"`,
+		`class="markdown-alert-title"`,
+		`class="markdown-alert-icon"`,
+		"https://example.com/note",
 		`id="repeated-heading"`,
 		"<table",
 		`<ul data-pos="`,
@@ -134,6 +142,8 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 		"md-view.css",
 		"local-image.svg",
 		`<span class="unsafe">raw HTML`,
+		`role="alert"`,
+		`<div class="title"`,
 	} {
 		if strings.Contains(renderedHTML, needle) {
 			t.Errorf("rendered HTML unexpectedly contains %q", needle)
@@ -175,6 +185,15 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 		`(?s)\.mermaid-toolbar button\s*\{[^}]*color:\s*var\(--md-view-high-emphasis\);[^}]*background:\s*var\(--md-view-page-background\);`,
 		`(?s)@media print\s*\{.*?\.document-source__path\s*\{[^}]*white-space:\s*normal;`,
 		`(?s)@media print\s*\{[^}]*\.md-view-header[^}]*display:\s*none\s*!important;`,
+		`(?s)\.callout\s*\{[^}]*border-left:\s*0\.25rem solid var\(--md-view-link\);`,
+		`(?s)\.markdown-alert\s*\{[^}]*border-left:\s*0\.25rem solid var\(--md-view-boundary\);`,
+		`(?s)\.markdown-alert-icon\s*\{[^}]*width:\s*1rem;[^}]*height:\s*1rem;`,
+		`(?s)\.markdown-alert-note\s*\{[^}]*border-left-color:\s*var\(--md-view-link\);`,
+		`(?s)\.markdown-alert-tip\s*\{[^}]*border-left-color:\s*var\(--md-view-success-text\);`,
+		`(?s)\.markdown-alert-important\s*\{[^}]*border-left-color:\s*var\(--md-view-important-text\);`,
+		`(?s)\.markdown-alert-warning\s*\{[^}]*border-left-color:\s*var\(--md-view-warning-text\);`,
+		`(?s)\.markdown-alert-caution\s*\{[^}]*border-left-color:\s*var\(--md-view-error-text\);`,
+		`(?s)@media print\s*\{.*?\.markdown-alert-note\s*\{[^}]*border-left-color:\s*#0969da;`,
 		`(?s)@media print\s*\{[^}]*\.md-view-theme-switcher[^}]*display:\s*none\s*!important;`,
 		`(?s)@media print\s*\{.*?\.mermaid-toolbar\s*\{[^}]*display:\s*none;`,
 	} {
@@ -203,6 +222,10 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 		"ordinary fenced code remains code",
 		"flowchart TD",
 		"sequenceDiagram",
+		"nested alert item",
+		"Unknown markers stay ordinary block quotes.",
+		"This fenced note div is not an alert.",
+		"A note with emphasis",
 	} {
 		if !strings.Contains(renderedText, fragment) {
 			t.Errorf("representative fixture content missing %q", fragment)
@@ -246,9 +269,105 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 		{name: "table-scroll data-pos", regex: `<div class="table-scroll" data-pos="`},
 		{name: "explicit heading data-pos", regex: `<h2 data-pos="[^"]*" id="explicit-heading"`},
 		{name: "repeated heading data-pos", regex: `<h2 data-pos="[^"]*" id="repeated-heading"`},
+		{name: "note alert data-pos", regex: `<div class="markdown-alert markdown-alert-note" data-pos="`},
+		{name: "tip alert data-pos", regex: `<div class="markdown-alert markdown-alert-tip" data-pos="`},
+		{name: "important alert data-pos", regex: `<div class="markdown-alert markdown-alert-important" data-pos="`},
+		{name: "warning alert data-pos", regex: `<div class="markdown-alert markdown-alert-warning" data-pos="`},
+		{name: "caution alert data-pos", regex: `<div class="markdown-alert markdown-alert-caution" data-pos="`},
 	} {
 		if !regexp.MustCompile(test.regex).MatchString(renderedHTML) {
 			t.Errorf("%s: no match for %s", test.name, test.regex)
+		}
+	}
+
+	if got := strings.Count(renderedHTML, `class="markdown-alert `); got != 5 {
+		t.Errorf("namespaced alert count = %d, want 5", got)
+	}
+	if got := strings.Count(renderedHTML, `id="fixture-callout"`); got != 1 {
+		t.Errorf("callout count = %d, want 1", got)
+	}
+	if !regexp.MustCompile(`<div class="note"`).MatchString(renderedHTML) {
+		t.Error("fenced note div should remain class=\"note\"")
+	}
+	if regexp.MustCompile(`<div class="note"[^>]*markdown-alert`).MatchString(renderedHTML) {
+		t.Error("fenced note div should not receive markdown-alert classes")
+	}
+	var unknownQuote string
+	for _, quote := range regexp.MustCompile(`(?s)<blockquote data-pos="[^"]*">.*?</blockquote>`).FindAllString(renderedHTML, -1) {
+		if strings.Contains(quote, "UNKNOWN") {
+			unknownQuote = quote
+			break
+		}
+	}
+	if unknownQuote == "" {
+		t.Error("unknown alert marker should remain an ordinary blockquote")
+	}
+	if strings.Contains(unknownQuote, "markdown-alert") {
+		t.Error("unknown alert marker should not be rewritten as a namespaced alert")
+	}
+
+	alertTitles := map[string]string{
+		"note":      "Note",
+		"tip":       "Tip",
+		"important": "Important",
+		"warning":   "Warning",
+		"caution":   "Caution",
+	}
+	iconPaths := map[string]string{
+		"note":      "M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5",
+		"tip":       "M8 1.5c-2.363 0-4 1.69-4 3.75",
+		"important": "M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5",
+		"warning":   "M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378",
+		"caution":   "M4.47.22A.749.749 0 0 1 5 0h6c.199 0 .389.079.53.22l4.25 4.25",
+	}
+	for _, kind := range []string{"note", "tip", "important", "warning", "caution"} {
+		start := strings.Index(renderedHTML, `<div class="markdown-alert markdown-alert-`+kind+`"`)
+		if start < 0 {
+			t.Errorf("%s alert HTML not found", kind)
+			continue
+		}
+		next := strings.Index(renderedHTML[start+1:], `<div class="markdown-alert markdown-alert-`)
+		end := len(renderedHTML)
+		if next >= 0 {
+			end = start + 1 + next
+		}
+		content := renderedHTML[start:end]
+		titleMatch := regexp.MustCompile(`(?s)<div class="markdown-alert-title">(.*?)</div>`).FindStringSubmatch(content)
+		if titleMatch == nil {
+			t.Errorf("%s alert missing markdown-alert-title", kind)
+			continue
+		}
+		if !strings.Contains(titleMatch[1], "</svg>"+alertTitles[kind]+"</p>") {
+			t.Errorf("%s alert missing canonical title %q", kind, alertTitles[kind])
+		}
+		svgTag := regexp.MustCompile(`<svg\b([^>]*)>`).FindStringSubmatch(titleMatch[1])
+		if svgTag == nil {
+			t.Errorf("%s alert title missing decorative SVG", kind)
+			continue
+		}
+		for _, attribute := range []string{
+			`class="markdown-alert-icon"`,
+			`aria-hidden="true"`,
+			`focusable="false"`,
+			`viewBox="0 0 16 16"`,
+		} {
+			if !strings.Contains(svgTag[1], attribute) {
+				t.Errorf("%s alert icon missing %s", kind, attribute)
+			}
+		}
+		if !strings.Contains(titleMatch[1], iconPaths[kind]) {
+			t.Errorf("%s alert icon path mismatch", kind)
+		}
+	}
+	noteStart := strings.Index(renderedHTML, `<div class="markdown-alert markdown-alert-note"`)
+	noteEnd := strings.Index(renderedHTML, `<div class="markdown-alert markdown-alert-tip"`)
+	if noteStart < 0 || noteEnd < 0 || noteEnd <= noteStart {
+		t.Fatal("note alert body not found")
+	}
+	noteAlert := renderedHTML[noteStart:noteEnd]
+	for _, fragment := range []string{"<strong>", `href="https://example.com/note"`, "<code ", "<li>"} {
+		if !strings.Contains(noteAlert, fragment) {
+			t.Errorf("note alert missing nested Markdown HTML %q", fragment)
 		}
 	}
 
@@ -552,6 +671,7 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 		"--color-green-50",
 		"--color-red-50",
 		"--color-violet-700",
+		"--color-amber-800",
 	} {
 		if !strings.Contains(generatedCSS, token) {
 			t.Errorf("generated stylesheet missing light token %q", token)

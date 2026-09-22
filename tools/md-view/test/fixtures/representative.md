@@ -41,6 +41,30 @@ section and includes **same phrase** once more.
 This fenced div is a future-friendly component boundary.
 :::
 
+> [!NOTE]
+> A note with **emphasis**, a [link](https://example.com/note), and `inline code`.
+>
+> - nested alert item
+
+> [!TIP]
+> A tip with useful guidance.
+
+> [!IMPORTANT]
+> An important reminder.
+
+> [!WARNING]
+> A warning about risk.
+
+> [!CAUTION]
+> A caution about a destructive action.
+
+> [!UNKNOWN]
+> Unknown markers stay ordinary block quotes.
+
+::: {.note}
+This fenced note div is not an alert.
+:::
+
 ## Tables
 
 | Name | Count | Status |
