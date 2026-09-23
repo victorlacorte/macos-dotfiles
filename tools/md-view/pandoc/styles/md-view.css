@@ -62,6 +62,7 @@
   --md-view-code-number: var(--color-sky-700);
   --md-view-code-meta: var(--color-violet-700);
   --md-view-kbd-shadows: rgb(0 0 0 / 10%);
+  --md-view-scrim: rgb(0 0 0 / 45%);
 }
 html[data-md-view-theme="dark"] {
   color-scheme: dark;
@@ -90,6 +91,7 @@ html[data-md-view-theme="dark"] {
   --md-view-code-number: var(--color-sky-300);
   --md-view-code-meta: var(--color-violet-300);
   --md-view-kbd-shadows: rgb(255 255 255 / 10%);
+  --md-view-scrim: rgb(255 255 255 / 16%);
 }
 @media (prefers-color-scheme: dark) {
   html:not([data-md-view-theme]) {
@@ -119,6 +121,7 @@ html[data-md-view-theme="dark"] {
     --md-view-code-number: var(--color-sky-300);
     --md-view-code-meta: var(--color-violet-300);
     --md-view-kbd-shadows: rgb(255 255 255 / 10%);
+    --md-view-scrim: rgb(255 255 255 / 16%);
   }
 }
 body {
@@ -770,7 +773,7 @@ body {
   bottom: 1.5rem;
   z-index: 1;
   display: grid;
-  grid-template-areas: ". up zoom-in" "left reset right" ". down zoom-out";
+  grid-template-areas: "expand up zoom-in" "left reset right" ". down zoom-out";
   grid-template-columns: repeat(3, 2rem);
   grid-template-rows: repeat(3, 2rem);
   gap: 0.25rem;
@@ -833,6 +836,86 @@ body {
 }
 .mermaid-reset {
   grid-area: reset;
+}
+.mermaid-expand {
+  grid-area: expand;
+}
+.mermaid-dialog {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  box-sizing: border-box;
+  width: calc(100vw - 2rem);
+  height: calc(100vh - 2rem);
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  padding: 1rem;
+  overflow: hidden;
+  color: var(--md-view-code-text);
+  background: var(--md-view-raised-surface);
+  border: 1px solid var(--md-view-boundary);
+  border-radius: 0.5rem;
+}
+.mermaid-dialog::backdrop {
+  background: var(--md-view-scrim);
+}
+.mermaid-dialog-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+.mermaid-dialog .mermaid-viewport {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.mermaid-dialog .mermaid-viewport > svg {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+.mermaid-dialog .mermaid-toolbar {
+  right: 0.5rem;
+  bottom: 0.5rem;
+  grid-template-areas: ". up zoom-in" "left reset right" ". down zoom-out";
+}
+.mermaid-dialog-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 2;
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  margin: 0;
+  padding: 0.375rem;
+  color: var(--md-view-high-emphasis);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  background: var(--md-view-page-background);
+  border: 1px solid var(--md-view-strong-boundary);
+  border-radius: 0.375rem;
+}
+.mermaid-dialog-close:hover {
+  background: var(--md-view-boundary);
+}
+.mermaid-dialog-close svg {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+.mermaid-dialog-close:focus-visible {
+  outline: 2px solid var(--md-view-focus);
+  outline-offset: 2px;
 }
 .mermaid-toolbar button:focus-visible {
   outline: 2px solid var(--md-view-focus);
@@ -1052,6 +1135,9 @@ code.sourceCode span.ot, code.sourceCode span.at, code.sourceCode span.dt {
     min-height: 0;
   }
   .mermaid-toolbar {
+    display: none;
+  }
+  .mermaid-dialog {
     display: none;
   }
   .mermaid-error {

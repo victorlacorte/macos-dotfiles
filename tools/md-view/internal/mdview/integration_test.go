@@ -130,6 +130,10 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 		`window.addEventListener("afterprint"`,
 		`svg.setAttribute("tabindex", "0")`,
 		`toolbar.setAttribute("role", "toolbar")`,
+		`dialog.showModal()`,
+		`prefixSvgIds(`,
+		`return "url(#" + next + ")"`,
+		`event.target === dialog`,
 		`var generation = renderGeneration + 1`,
 		`navigationControllers = []`,
 		`generation === renderGeneration`,
@@ -168,6 +172,8 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 		"text-overflow: ellipsis;",
 		"white-space: nowrap;",
 		"overflow-wrap: anywhere;",
+		"--md-view-scrim: rgb(0 0 0 / 45%);",
+		"--md-view-scrim: rgb(255 255 255 / 16%);",
 	} {
 		if !strings.Contains(embeddedCSS, fragment) {
 			t.Errorf("embedded CSS missing %q", fragment)
@@ -198,6 +204,10 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 		`(?s)@media print\s*\{.*?\.markdown-alert-note\s*\{[^}]*border-left-color:\s*#0969da;`,
 		`(?s)@media print\s*\{[^}]*\.md-view-theme-switcher[^}]*display:\s*none\s*!important;`,
 		`(?s)@media print\s*\{.*?\.mermaid-toolbar\s*\{[^}]*display:\s*none;`,
+		`(?s)\.mermaid-dialog\s*\{[^}]*width:\s*calc\(100vw - 2rem\);[^}]*height:\s*calc\(100vh - 2rem\);`,
+		`(?s)\.mermaid-dialog::backdrop\s*\{[^}]*background:\s*var\(--md-view-scrim\);`,
+		`(?s)\.mermaid-expand\s*\{[^}]*grid-area:\s*expand;`,
+		`(?s)@media print\s*\{.*?\.mermaid-dialog\s*\{[^}]*display:\s*none;`,
 	} {
 		if !regexp.MustCompile(rule).MatchString(embeddedCSS) {
 			t.Errorf("embedded CSS missing rule %q", rule)
@@ -238,6 +248,7 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 	}
 
 	for _, label := range []string{
+		"Expand",
 		"Pan up",
 		"Zoom in",
 		"Pan left",
@@ -251,8 +262,8 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 			t.Errorf("rendered HTML missing control %q", label)
 		}
 	}
-	if got := strings.Count(renderedHTML, `createButton("`); got != 7 {
-		t.Errorf("control count = %d, want 7", got)
+	if got := strings.Count(renderedHTML, `createButton("`); got != 8 {
+		t.Errorf("control count = %d, want 8", got)
 	}
 
 	if got := len(regexp.MustCompile(`<script[^>]*src=`).FindAllString(renderedHTML, -1)); got != 1 {

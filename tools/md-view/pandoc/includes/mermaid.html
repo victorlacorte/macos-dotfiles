@@ -15,11 +15,16 @@
     right: "M4 8h8M8.5 4.5 12 8l-3.5 3.5",
     zoomIn: "M7 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm3-1 3 3M7 5v4M5 7h4",
     zoomOut: "M7 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm3-1 3 3M5 7h4",
-    reset: "M3.5 5.5A5 5 0 1 1 3 10m.5-4.5v-3m0 3h3"
+    reset: "M3.5 5.5A5 5 0 1 1 3 10m.5-4.5v-3m0 3h3",
+    expand: "M6 2.5H2.5V6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10",
+    close: "M4 4l8 8M12 4 4 12"
   };
   var diagrams;
   var navigationControllers = [];
   var renderGeneration = 0;
+  var openDialog = null;
+  var suppressDialogFocusRestore = false;
+  var dialogSequence = 0;
 
   function addError(node, message, source) {
     if (typeof source === "string") {
@@ -118,7 +123,7 @@
     return icon;
   }
 
-  function createButton(label, className, iconPath, action, svg) {
+  function createButton(label, className, iconPath, action, svg, movesFocus) {
     var button = document.createElement("button");
     var activatedByPointer = false;
     button.type = "button";
@@ -138,6 +143,10 @@
     });
     button.addEventListener("click", function () {
       action();
+      if (movesFocus) {
+        activatedByPointer = false;
+        return;
+      }
       if (activatedByPointer) {
         button.blur();
       } else {
@@ -148,7 +157,156 @@
     return button;
   }
 
-  function addNavigation(node) {
+  function rewriteIdReferences(value, ids) {
+    if (!value || value.indexOf("#") === -1) {
+      return value;
+    }
+    return value.replace(/url\(\s*(["']?)#([^"')]+)\1\s*\)|#([A-Za-z_][\w:.-]*)/g, function (match, quote, urlId, hashId) {
+      var id = urlId || hashId;
+      var next = ids[id];
+      if (!next) {
+        return match;
+      }
+      if (urlId) {
+        return "url(#" + next + ")";
+      }
+      return "#" + next;
+    });
+  }
+
+  function prefixSvgIds(svg, prefix) {
+    var idElements = [];
+    if (svg.getAttribute("id")) {
+      idElements.push(svg);
+    }
+    Array.prototype.forEach.call(svg.querySelectorAll("[id]"), function (element) {
+      idElements.push(element);
+    });
+    var ids = {};
+    idElements.forEach(function (element) {
+      var id = element.getAttribute("id");
+      if (id) {
+        ids[id] = prefix + id;
+      }
+    });
+    var all = [svg];
+    Array.prototype.forEach.call(svg.querySelectorAll("*"), function (element) {
+      all.push(element);
+    });
+    all.forEach(function (element) {
+      var snapshot = [];
+      Array.prototype.forEach.call(element.attributes, function (attr) {
+        snapshot.push({
+          name: attr.name,
+          value: attr.value,
+          namespaceURI: attr.namespaceURI
+        });
+      });
+      snapshot.forEach(function (attr) {
+        if (attr.name === "id") {
+          if (ids[attr.value]) {
+            element.setAttribute("id", ids[attr.value]);
+          }
+          return;
+        }
+        var next = rewriteIdReferences(attr.value, ids);
+        if (next === attr.value) {
+          return;
+        }
+        if (attr.namespaceURI) {
+          element.setAttributeNS(attr.namespaceURI, attr.name, next);
+        } else {
+          element.setAttribute(attr.name, next);
+        }
+      });
+      if (element.localName === "style") {
+        element.textContent = rewriteIdReferences(element.textContent, ids);
+      }
+    });
+  }
+
+  function cloneDiagramSvg(source, initialValue) {
+    var clone = source.cloneNode(true);
+    dialogSequence += 1;
+    prefixSvgIds(clone, "mermaid-dialog-" + dialogSequence + "-");
+    clone.setAttribute("viewBox", initialValue);
+    clone.setAttribute("preserveAspectRatio", "xMidYMid meet");
+    clone.removeAttribute("width");
+    clone.removeAttribute("height");
+    clone.style.removeProperty("max-width");
+    clone.style.removeProperty("width");
+    clone.style.removeProperty("height");
+    return clone;
+  }
+
+  function closeDiagramDialog() {
+    if (openDialog) {
+      openDialog.close();
+    }
+  }
+
+  function removeNavigationController(controller) {
+    if (!controller) {
+      return;
+    }
+    var index = navigationControllers.indexOf(controller);
+    if (index !== -1) {
+      navigationControllers.splice(index, 1);
+    }
+  }
+
+  function openDiagramDialog(sourceSvg, initialValue, opener) {
+    if (openDialog) {
+      suppressDialogFocusRestore = true;
+      openDialog.close();
+      suppressDialogFocusRestore = false;
+    }
+
+    var dialog = document.createElement("dialog");
+    var host = document.createElement("div");
+    var closeButton = document.createElement("button");
+    var controller = null;
+    dialog.className = "mermaid-dialog";
+    dialog.setAttribute("aria-label", "Mermaid diagram");
+    host.className = "mermaid-dialog-stage";
+    host.appendChild(cloneDiagramSvg(sourceSvg, initialValue));
+    closeButton.type = "button";
+    closeButton.className = "mermaid-dialog-close";
+    closeButton.setAttribute("aria-label", "Close Mermaid diagram");
+    closeButton.appendChild(createIcon(ICON_PATHS.close));
+    closeButton.addEventListener("click", function () {
+      dialog.close();
+    });
+    dialog.appendChild(host);
+    dialog.appendChild(closeButton);
+    dialog.addEventListener("click", function (event) {
+      if (event.target === dialog) {
+        dialog.close();
+      }
+    });
+    dialog.addEventListener("close", function () {
+      removeNavigationController(controller);
+      if (dialog.parentNode) {
+        dialog.parentNode.removeChild(dialog);
+      }
+      if (openDialog === dialog) {
+        openDialog = null;
+      }
+      if (!suppressDialogFocusRestore && opener && opener.isConnected) {
+        opener.focus();
+      }
+    });
+    document.body.appendChild(dialog);
+    openDialog = dialog;
+    controller = addNavigation(host, false);
+    dialog.showModal();
+    var dialogSvg = host.querySelector("svg");
+    if (dialogSvg) {
+      dialogSvg.focus();
+    }
+  }
+
+  function addNavigation(node, allowExpand) {
     var svg = node.querySelector("svg");
     if (!svg || node.querySelector(".mermaid-toolbar")) {
       return;
@@ -299,7 +457,16 @@
     var zoomOut = createButton("Zoom out", "mermaid-zoom-out", ICON_PATHS.zoomOut, function () {
       zoomTo(state.zoom / ZOOM_STEP);
     }, svg);
+    var expand = null;
+    if (allowExpand !== false) {
+      expand = createButton("Expand", "mermaid-expand", ICON_PATHS.expand, function () {
+        openDiagramDialog(svg, initialValue, expand);
+      }, svg, true);
+    }
 
+    if (expand) {
+      toolbar.appendChild(expand);
+    }
     toolbar.appendChild(panUp);
     toolbar.appendChild(zoomIn);
     toolbar.appendChild(panLeft);
@@ -328,7 +495,7 @@
     });
     updateButtons();
 
-    navigationControllers.push({
+    var controller = {
       beforePrint: function () {
         if (printViewBox === null) {
           printViewBox = svg.getAttribute("viewBox");
@@ -341,10 +508,13 @@
           printViewBox = null;
         }
       }
-    });
+    };
+    navigationControllers.push(controller);
+    return controller;
   }
 
   window.addEventListener("beforeprint", function () {
+    closeDiagramDialog();
     navigationControllers.forEach(function (controller) {
       controller.beforePrint();
     });
@@ -357,6 +527,7 @@
   });
 
   function renderDiagrams() {
+    closeDiagramDialog();
     var current = collectDiagrams();
     var generation = renderGeneration + 1;
     renderGeneration = generation;
