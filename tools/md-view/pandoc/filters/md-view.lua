@@ -97,6 +97,10 @@ local function mermaid_attributes(attr)
   return identifier, attributes
 end
 
+local function escape_html_text(text)
+  return text:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")
+end
+
 function CodeBlock(el)
   local is_mermaid = false
   for _, class_name in ipairs(el.classes) do
@@ -118,7 +122,7 @@ function CodeBlock(el)
   end
 
   return pandoc.Div(
-    { pandoc.Plain({ pandoc.Str(el.text) }) },
+    { pandoc.Plain({ pandoc.RawInline("html", escape_html_text(el.text)) }) },
     pandoc.Attr(identifier, classes, attributes)
   )
 end

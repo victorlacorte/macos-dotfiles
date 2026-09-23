@@ -99,6 +99,8 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 		`<blockquote data-pos="`,
 		"flowchart TD",
 		"sequenceDiagram",
+		"Author-&gt;&gt;Viewer: Save Markdown",
+		"Viewer--&gt;&gt;Author: Render HTML",
 		"Mermaid could not render this diagram",
 		"node.textContent = source",
 		"Mermaid diagram navigation",
@@ -693,6 +695,84 @@ func TestRenderRepresentativeFixture(t *testing.T) {
 	if len(artifacts) != 0 {
 		t.Errorf("fixture directory received an output artifact: %v", artifacts)
 	}
+}
+
+func TestRenderMermaidSourceStaysIntact(t *testing.T) {
+	pandocPath := resolvePandoc(t)
+	dataDir, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fixturePath := filepath.Join(dataDir, "test", "fixtures", "mermaid-wrap.md")
+	sourceMarkdown := string(readFile(t, fixturePath))
+	source := mermaidFence(t, sourceMarkdown)
+
+	root := t.TempDir()
+	input := filepath.Join(root, "mermaid-wrap.md")
+	copyFile(t, fixturePath, input)
+	output := filepath.Join(root, "mermaid-wrap.html")
+
+	var stdout, stderr bytes.Buffer
+	app := &mdview.App{
+		Runner: mdview.OSRunner{},
+		LookPath: func(string) (string, error) {
+			return pandocPath, nil
+		},
+		LookupEnv: func(name string) (string, bool) {
+			if name == "MD_VIEW_DATA_DIR" {
+				return dataDir, true
+			}
+			return "", false
+		},
+		Program: "md-view",
+		Stdout:  &stdout,
+		Stderr:  &stderr,
+	}
+	status := app.Main(context.Background(), []string{"render", input, "--output", output})
+	if status != 0 {
+		t.Fatalf("render status = %d, stderr=%q", status, stderr.String())
+	}
+
+	renderedHTML := string(readFile(t, output))
+	divs := regexp.MustCompile(`(?s)<div\b[^>]*\bclass="mermaid"[^>]*>(.*?)</div>`).FindAllStringSubmatch(renderedHTML, -1)
+	if len(divs) != 1 {
+		t.Fatalf("mermaid div count = %d, want 1", len(divs))
+	}
+	inner := divs[0][1]
+	if strings.Contains(inner, "<") {
+		t.Fatalf("mermaid HTML contains a raw <, which could become a live tag: %q", inner)
+	}
+
+	longMessage := "Paywall-&gt;&gt;Offerings: GET offerings (productType=addon, productSku=protect)"
+	if !strings.Contains(inner, longMessage) {
+		t.Fatalf("long message is not one HTML line: %q", inner)
+	}
+	special := "compare a &lt; b &amp; b &gt; c"
+	if !strings.Contains(inner, special) {
+		t.Fatalf("special characters were not escaped as %q\nhtml: %q", special, inner)
+	}
+
+	got := htmllib.UnescapeString(inner)
+	got = strings.TrimPrefix(got, "\n")
+	if got != source {
+		t.Fatalf("unescaped mermaid text = %q, want %q", got, source)
+	}
+}
+
+func mermaidFence(t *testing.T, markdown string) string {
+	t.Helper()
+	const open = "```mermaid\n"
+	start := strings.Index(markdown, open)
+	if start < 0 {
+		t.Fatal("fixture missing mermaid fence")
+	}
+	rest := markdown[start+len(open):]
+	end := strings.Index(rest, "\n```")
+	if end < 0 {
+		t.Fatal("fixture mermaid fence is not closed")
+	}
+	return rest[:end+1]
 }
 
 func resolvePandoc(t *testing.T) string {

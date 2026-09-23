@@ -120,9 +120,6 @@ html[data-md-view-theme="dark"] {
     --md-view-code-meta: var(--color-violet-300);
     --md-view-kbd-shadows: rgb(255 255 255 / 10%);
   }
-  html:not([data-md-view-theme]) body {
-    line-height: 1.85;
-  }
 }
 body {
   box-sizing: border-box;
@@ -591,9 +588,6 @@ body {
   --tw-prose-pre-bg: var(--md-view-code-background);
   --tw-prose-th-borders: var(--md-view-strong-boundary);
   --tw-prose-td-borders: var(--md-view-boundary);
-}
-html[data-md-view-theme="dark"] body {
-  line-height: 1.85;
 }
 .md-view-header {
   display: flex;

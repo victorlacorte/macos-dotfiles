@@ -89,8 +89,9 @@ The filter in `pandoc/filters/md-view.lua` has six responsibilities:
    boundary. The wrapper keeps each source-backed child and its `data-pos`
    attributes intact.
 3. It changes fenced code blocks with the `mermaid` class into safe `.mermaid`
-   containers whose source text is escaped by Pandoc's HTML writer. Their
-   identifier, classes, safe data/ARIA attributes, and `data-pos` are kept.
+   containers. The filter escapes the diagram text and emits it as raw HTML so
+   Pandoc's column wrap cannot split messages. Their identifier, classes, safe
+   data/ARIA attributes, and `data-pos` are kept.
 4. It wraps each semantic Pandoc table in `.table-scroll` while retaining the
    original table, caption, alignment, and source metadata.
 5. It rewrites Pandoc GitHub-style alert Divs to exclusive
@@ -179,8 +180,7 @@ use dedicated amber and violet tokens. The complete page uses one centered 68ch
 content measure, with responsive horizontal gutters outside that measure. Tables, code,
 figures, Mermaid diagrams, and fenced components stay within the same measure.
 Intrinsically wide content scrolls inside its component; there are no
-full-width or other wide-layout exceptions. Dark prose uses a 1.85 line
-height. Light keeps the existing prose leading.
+full-width or other wide-layout exceptions.
 
 The role-based colors follow the approach in
 [Tailwind Typography's dark-mode guidance](https://tailwindcss.com/blog/tailwindcss-typography-v0-5),
