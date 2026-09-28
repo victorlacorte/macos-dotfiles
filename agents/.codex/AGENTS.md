@@ -1,18 +1,4 @@
-Read and follow the instructions in `~/AGENTS.md`. These instructions apply in
-addition to the rules in this file; where they conflict, this file takes
-precedence.
-
-Codex uses the versioned `general` profile to grant the sandbox permission
-needed to persist Plan Mode handoffs in `~/.codex/plans/`. The profile overlays
-the private `~/.codex/config.toml`; it does not replace or manage that file.
-
-The shell wrapper in `zsh/.zshrc` adds `--profile general` when no explicit
-profile is provided. It preserves `--profile`, `--profile=...`, and `-p`
-arguments. Use `command codex ...` to bypass the wrapper when needed. Create
-`~/.codex/plans/` before using the profile if it does not exist.
-
-This `AGENTS.md` documents the required permission and workflow, but it cannot
-grant sandbox access by itself.
+Read and follow the instructions in `~/AGENTS.md`. These instructions apply in addition to the rules in this file; where they conflict, this file takes precedence.
 
 ## Plan Handoff
 

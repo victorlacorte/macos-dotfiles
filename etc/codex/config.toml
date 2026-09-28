@@ -1,0 +1,34 @@
+[sandbox_workspace_write]
+writable_roots = ["/Users/victorlacorte/.codex/plans"]
+
+[tui]
+status_line = ["model-with-reasoning", "current-dir", "context-used", "used-tokens"]
+fullscreen_transcript = false
+
+[mcp_servers.shadcn]
+command = "npx"
+args = ["shadcn@latest", "mcp"]
+enabled = false
+
+[mcp_servers.shadcn.tools.get_add_command_for_items]
+approval_mode = "approve"
+
+[mcp_servers.shadcn.tools.get_project_registries]
+approval_mode = "approve"
+
+[mcp_servers.shadcn.tools.list_items_in_registries]
+approval_mode = "approve"
+
+[mcp_servers.shadcn.tools.search_items_in_registries]
+approval_mode = "approve"
+
+[mcp_servers.shadcn.tools.view_items_in_registries]
+approval_mode = "approve"
+
+[mcp_servers.shadcn.tools.get_item_examples_from_registries]
+approval_mode = "approve"
+
+[mcp_servers.chrome_devtools]
+command = "npx"
+args = ["-y", "chrome-devtools-mcp@latest", "--headless", "--isolated"]
+enabled = false
