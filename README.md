@@ -52,20 +52,39 @@ automatically.
 
 ## Codex
 
-The `agents/.codex/general.config.toml` profile grants Codex's
-`workspace-write` sandbox access to `~/.codex/plans/`, which is required for
-persisting Plan Mode handoffs. Stow it to create
-`~/.codex/general.config.toml`:
+Shared Codex settings live in `etc/codex/config.toml` and are installed
+as `/etc/codex/config.toml`. The system config adds `~/.codex/plans/` as a
+writable root for `workspace-write` sessions, sets the status line, and holds
+the disabled `shadcn` and `chrome_devtools` MCP servers.
+
+The Stow command in Requirements applies to packages installed under `$HOME`.
+This Codex system config is the `etc` Stow package. Run from the repository
+root and target `/etc`, which requires administrator privileges:
 
 ```sh
 mkdir -p "$HOME/.codex/plans"
+sudo "$(command -v stow)" --target=/etc etc
+```
+
+Stow stops if an unmanaged `config.toml` already exists there. Inspect it
+before removing or replacing it.
+
+Stow creates a relative symlink at `/etc/codex/config.toml`. If the repository
+moves, remove that link and stow the package again from the new checkout. Use
+`codex ...` directly; no shell wrapper adds arguments.
+
+The `agents/.codex/general.config.toml` profile remains available for explicit
+`--profile general` use. Stow it to create `~/.codex/general.config.toml`:
+
+```sh
 stow --target="$HOME" agents
 ```
 
-The existing private `~/.codex/config.toml` remains untouched. The `codex`
-function in `zsh/.zshrc` automatically supplies `--profile general` unless an
-explicit profile is provided; use `command codex ...` to bypass the wrapper.
-`AGENTS.md` documents this permission but cannot grant it.
+The profile retains its model, reasoning, sandbox, and project trust settings.
+It overlays the private `~/.codex/config.toml`; it does not replace or manage
+that file. Keep client-specific values such as project trust in the private
+config. `agents/.codex/AGENTS.md` documents the handoff workflow, but the
+system config grants the plans directory access.
 
 ## Tmux
 

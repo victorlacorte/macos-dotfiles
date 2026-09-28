@@ -25,21 +25,3 @@ alias ll='ls -lhAF'
 alias vim='nvim'
 alias pn='pnpm'
 alias grep='grep --color=always'
-
-codex() {
-  local arg
-
-  for arg in "$@"; do
-    case "$arg" in
-      --)
-        break
-        ;;
-      --profile|-p|--profile=*)
-        command codex "$@"
-        return
-        ;;
-    esac
-  done
-
-  command codex --profile general "$@"
-}
