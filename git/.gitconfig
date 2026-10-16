@@ -8,6 +8,7 @@
 [core]
 	editor = nvim
 	ignorecase = false
+	untrackedCache = true
 [fetch]
 	prune = true
 [rerere]
