@@ -8,4 +8,6 @@ macos-titlebar-style = transparent
 
 # https://ghostty.org/docs/features/theme#built-in-themes (sourced from
 # https://iterm2colorschemes.com/)
-theme = TokyoNight Night
+# Conditional form so mode 2031 reports the right light/dark scheme to tmux:
+# https://github.com/ghostty-org/ghostty/discussions/8906
+theme = light:TokyoNight Night,dark:TokyoNight Night
