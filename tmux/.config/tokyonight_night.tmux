@@ -11,6 +11,18 @@ set -g message-command-style "fg=#7aa2f7,bg=#3b4261"
 set -g pane-border-style "fg=#3b4261"
 set -g pane-active-border-style "fg=#7aa2f7"
 
+set -g popup-style "default"
+set -g popup-border-style "fg=#7aa2f7"
+
+set -g menu-style "fg=#c0caf5,bg=#16161e"
+set -g menu-selected-style "fg=#7aa2f7,bg=#3b4261"
+set -g menu-border-style "fg=#3b4261,bg=#16161e"
+
+set -g tree-mode-border-style "fg=#3b4261"
+set -g tree-mode-preview-style "fg=#{?#{||:#{&&:#{pane_format},#{pane_active}},#{&&:#{window_format},#{window_active}}},#7aa2f7,#3b4261}"
+
+set -g display-panes-border-style "fg=#3b4261"
+
 set -g status "on"
 set -g status-justify "left"
 
