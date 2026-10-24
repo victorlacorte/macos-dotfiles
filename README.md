@@ -231,3 +231,9 @@ If it works, `git log --show-signature -1` should show a good GPG signature usin
 ```sh
 XDG_CONFIG_HOME=./nvim-0.11/ nvim nvim-0.11/nvim/init.lua
 ```
+
+## Skills
+
+```sh
+gh skill install github/gh-stack gh-stack --agent codex --scope user
+```
