@@ -231,3 +231,78 @@ If it works, `git log --show-signature -1` should show a good GPG signature usin
 ```sh
 XDG_CONFIG_HOME=./nvim-0.11/ nvim nvim-0.11/nvim/init.lua
 ```
+
+## Skills
+
+Install `jq` and GitHub CLI with its `gh skill` commands. Put
+`$HOME/.local/bin` on `PATH`, as for the other local tools in this repository.
+From the repository root, install the wrapper and its catalog with:
+
+```sh
+make install-skills
+```
+
+`skills/catalog.json` is the editable source recipe. `make install-skills`
+refreshes the installed copy at `$HOME/.local/share/macos-dotfiles/skills/catalog.json`.
+The wrapper uses the checkout catalog when run directly as
+`./scripts/skills`; set `SKILLS_CATALOG` to use another JSON catalog. Run the
+installed `skills` command from any directory:
+
+```sh
+skills install unslop
+skills install --all --harness both
+skills install gh-stack --harness cursor --scope user
+```
+
+By default, installs go to `~/.agents/skills`. Codex and Cursor both discover
+that shared directory, so `--harness both` installs one copy. Shared installs
+and Codex user installs reject a directory symlink at that destination.
+Cursor-only user installs use `~/.cursor/skills` and are not blocked by the
+shared directory's current Stow link. Selecting one harness uses its native
+location; it does not hide that skill from another host that also discovers
+the location. User installs target the home directory. Project installs target
+the Git root's `.agents/skills`, even when you run the command from a
+subdirectory. Project installs reject a directory symlink at the repository
+destination. For example, run `skills install unslop --scope project` from a
+Git repository. `--all` means the six names in the local
+catalog, not every skill in their upstream repositories.
+
+The wrapper delegates to GitHub CLI. Installed directories retain upstream
+`SKILL.md`, optional `agents/openai.yaml`, supporting files, any license files
+included in those directories, and GitHub source metadata. Review changed
+upstream instructions when updating. Update the six curated skills with GitHub
+CLI's native command:
+
+```sh
+gh skill update unslop code-review domain-modeling grilling grill-with-docs gh-stack --dry-run
+gh skill update unslop code-review domain-modeling grilling grill-with-docs gh-stack
+```
+
+By default, `gh skill update` searches known host locations. Use `--dir PATH`
+to limit it to one directory. GitHub CLI resolves the latest release when
+available, otherwise the default branch head. Review the upstream changes.
+`gh skill list` shows the skills GitHub CLI finds in its known locations.
+
+### Existing Stow setup
+
+The current `~/.agents/skills` may be a Stow link to this checkout. Shared
+installs and Codex user installs require a real directory and refuse that link.
+Before using the shared default, inspect and back up the whole directory,
+including ignored `gh-stack` files and any unknown or private skills. Move
+downloaded upstream directories out of the Stow source and preserve any local
+edits before removing tracked snapshots. Keep authored `orchestrate` and
+`reviewable-prs` content. Reinstall upstream skills through `gh skill install`
+so GitHub CLI records their source metadata.
+
+Preview the Stow change before applying it:
+
+```sh
+stow --no --verbose --restow --no-folding --target="$HOME" agents
+```
+
+After reviewing the preview and arranging the backed-up files, make
+`~/.agents/skills` a real directory and apply the reviewed no-folding restow.
+`--no-folding` keeps Stow from folding the package directory into the target;
+it does not move existing files. Remove skill-specific notice text and the
+obsolete `gh-stack` ignore entry only after the upstream payloads have moved.
+Keep the adapter and Tailwind notices.

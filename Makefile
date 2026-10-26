@@ -1,4 +1,4 @@
-.PHONY: test install-agent-picker install-tmux-snapshot install-md-view build-md-view-css verify-md-view-css
+.PHONY: test install-agent-picker install-tmux-snapshot install-md-view install-skills build-md-view-css verify-md-view-css
 
 test:
 	go -C tools/agent-picker test ./...
@@ -25,6 +25,11 @@ install-md-view:
 	install -m 644 tools/md-view/pandoc/includes/source-copy.html "$(HOME)/.local/share/md-view/pandoc/includes/source-copy.html"
 	install -m 644 tools/md-view/pandoc/includes/theme-switcher.html "$(HOME)/.local/share/md-view/pandoc/includes/theme-switcher.html"
 	install -m 644 tools/md-view/pandoc/styles/md-view.css "$(HOME)/.local/share/md-view/pandoc/styles/md-view.css"
+
+install-skills:
+	install -d "$(HOME)/.local/bin" "$(HOME)/.local/share/macos-dotfiles/skills"
+	install -m 755 scripts/skills "$(HOME)/.local/bin/skills"
+	install -m 644 skills/catalog.json "$(HOME)/.local/share/macos-dotfiles/skills/catalog.json"
 
 tools/md-view/node_modules: tools/md-view/package.json tools/md-view/package-lock.json
 	npm ci --prefix tools/md-view

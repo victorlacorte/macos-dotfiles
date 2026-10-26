@@ -33,6 +33,7 @@ return {
       'git_rebase',
       'gitcommit',
 
+      'astro',
       'html',
       'css',
       'javascript',

@@ -1,5 +1,5 @@
 interface:
   display_name: "Orchestrate"
-  short_description: "Delegate implementation and exploration to subagents, review until it's right"
+  short_description: "Delegate work and checks, then review changes and evidence"
 policy:
   allow_implicit_invocation: false

@@ -1,0 +1,129 @@
+#!/bin/sh
+
+set -u
+
+usage() {
+  cat <<'EOF'
+Usage:
+  skills install NAME [--harness codex|cursor|both] [--scope user|project]
+  skills install --all [--harness codex|cursor|both] [--scope user|project]
+  skills --help
+
+Defaults: --harness both --scope user
+EOF
+}
+
+fail() {
+  printf 'skills: %s\n' "$*" >&2
+  exit 2
+}
+
+if [ "$#" -eq 1 ] && { [ "$1" = "--help" ] || [ "$1" = "-h" ]; }; then
+  usage
+  exit 0
+fi
+
+[ "$#" -ge 2 ] || { usage >&2; exit 2; }
+[ "$1" = "install" ] || fail "unknown command '$1'"
+shift
+
+if [ "$#" -eq 1 ] && { [ "$1" = "--help" ] || [ "$1" = "-h" ]; }; then
+  usage
+  exit 0
+fi
+
+selection=$1
+shift
+harness=both
+scope=user
+seen_harness=0
+seen_scope=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --harness)
+      [ "$seen_harness" -eq 0 ] || fail "--harness may be specified once"
+      [ "$#" -ge 2 ] || fail "--harness requires a value"
+      harness=$2
+      seen_harness=1
+      shift 2
+      ;;
+    --scope)
+      [ "$seen_scope" -eq 0 ] || fail "--scope may be specified once"
+      [ "$#" -ge 2 ] || fail "--scope requires a value"
+      scope=$2
+      seen_scope=1
+      shift 2
+      ;;
+    *) fail "unknown option '$1'" ;;
+  esac
+done
+
+case "$harness" in codex|cursor|both) ;; *) fail "invalid harness '$harness' (use codex, cursor, or both)" ;; esac
+case "$scope" in user|project) ;; *) fail "invalid scope '$scope' (use user or project)" ;; esac
+if [ "$selection" != "--all" ] && case "$selection" in -*|'') true ;; *) false ;; esac; then
+  fail "choose one skill name or --all"
+fi
+
+command -v jq >/dev/null 2>&1 || { printf 'skills: jq is required\n' >&2; exit 127; }
+if [ "${SKILLS_CATALOG+x}" = x ]; then
+  catalog=$SKILLS_CATALOG
+else
+  script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
+  repo_root=$(CDPATH= cd -- "$script_dir/.." && pwd) || exit 1
+  if [ -f "$repo_root/skills/catalog.json" ]; then
+    catalog=$repo_root/skills/catalog.json
+  else
+    catalog=$HOME/.local/share/macos-dotfiles/skills/catalog.json
+  fi
+fi
+[ -f "$catalog" ] || fail "catalog not found at '$catalog'"
+
+# Validate the complete catalog before selecting entries or invoking gh.
+jq -e '
+  type == "object" and
+  .schemaVersion == 1 and
+  (.skills | type == "object" and length > 0 and
+    all(to_entries[]; (.key | type == "string" and test("^[a-z0-9][a-z0-9-]*$")) and
+      (.value | type == "object" and
+        (.repository | type == "string" and test("^[A-Za-z0-9_][A-Za-z0-9_.-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*$")) and
+        (.selector | type == "string" and length > 0 and (startswith("-") | not) and (test("[[:cntrl:]]") | not)) and
+        (keys == ["repository", "selector"]))))
+' "$catalog" >/dev/null 2>&1 || fail "invalid catalog JSON or unsupported schema in '$catalog'"
+
+if [ "$selection" = "--all" ]; then
+  selected=$(jq -r '.skills | keys[]' "$catalog") || fail "cannot read catalog"
+else
+  jq -e --arg name "$selection" '.skills | has($name)' "$catalog" >/dev/null || fail "unknown skill '$selection'"
+  selected=$selection
+fi
+
+if [ "$scope" = project ]; then
+  project_root=$(git rev-parse --show-toplevel 2>/dev/null) || fail "project scope requires a Git work tree"
+  shared_dir=$project_root/.agents/skills
+else
+  shared_dir=$HOME/.agents/skills
+fi
+
+if [ "$scope" = project ] || [ "$harness" = both ] || [ "$harness" = codex ]; then
+  if [ -L "$shared_dir" ]; then
+    fail "shared skills directory '$shared_dir' is a symlink; run the documented Stow no-folding migration first"
+  fi
+fi
+
+command -v gh >/dev/null 2>&1 || { printf 'skills: gh is required\n' >&2; exit 127; }
+
+for name in $selected; do
+  repository=$(jq -r --arg name "$name" '.skills[$name].repository' "$catalog") || fail "cannot read '$name' from catalog"
+  selector=$(jq -r --arg name "$name" '.skills[$name].selector' "$catalog") || fail "cannot read '$name' from catalog"
+  if [ "$harness" = both ]; then
+    printf "Installing %s to %s (Codex and Cursor)\n" "$name" "$shared_dir"
+    gh skill install "$repository" "$selector" --dir "$shared_dir" || exit $?
+  else
+    destination=$shared_dir
+    if [ "$harness" = cursor ] && [ "$scope" = user ]; then
+      destination=$HOME/.cursor/skills
+    fi
+    printf "Installing %s to %s for %s (%s scope)\n" "$name" "$destination" "$harness" "$scope"
+    gh skill install "$repository" "$selector" --agent "$harness" --scope "$scope" || exit $?
+  fi
+done

@@ -27,4 +27,4 @@ If the file cannot be created, clearly report the failure instead of claiming th
 
 ## Subagent Selection
 
-When asked to spawn subagents, always spawn Luna Max (gpt-5.6-luna with max reasoning) agents unless the user explicitly requests a different agent type.
+When asked to spawn subagents, always spawn Luna Medium (gpt-6-luna with medium reasoning) agents unless the user explicitly requests a different agent type.
