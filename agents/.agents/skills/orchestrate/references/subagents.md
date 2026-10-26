@@ -19,7 +19,7 @@ Use the active harness adapter to map these choices to supported tool fields.
 
 ## Role boundaries
 
-- **Implementer:** Makes assigned changes. May read local sources and diffs. Does not run checks or external research; asks the parent to arrange missing research. Reports changed files, decisions, and blockers.
+- **Implementer:** Makes assigned changes. May read local sources and diffs. Does not run checks or external research; asks the parent to arrange missing research. Reports changed files, decisions, and blockers. Briefs do not ask implementers to self-verify their changes with searches or reviews; the parent reviews the diff, and explorers run the checks.
 - **Researcher:** Answers the assigned external question using available research sources. Prefers official primary sources and reports links or citations, distinguishing confirmed facts from unknowns. Does not implement.
 - **Explorer:** Maps the codebase or runs explicitly assigned cheap, deterministic checks, such as typechecking, lint, builds, tests, and formatting checks. For checks, runs only listed commands and reports each result, generated artifacts, and working-tree changes. Does not edit source or fix failures.
 
