@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "skills": {
+    "unslop": {
+      "repository": "cursor/plugins",
+      "selector": "pstack/skills/unslop"
+    },
+    "code-review": {
+      "repository": "mattpocock/skills",
+      "selector": "code-review"
+    },
+    "domain-modeling": {
+      "repository": "mattpocock/skills",
+      "selector": "domain-modeling"
+    },
+    "grilling": {
+      "repository": "mattpocock/skills",
+      "selector": "grilling"
+    },
+    "grill-with-docs": {
+      "repository": "mattpocock/skills",
+      "selector": "grill-with-docs"
+    },
+    "gh-stack": {
+      "repository": "github/gh-stack",
+      "selector": "gh-stack"
+    }
+  }
+}
