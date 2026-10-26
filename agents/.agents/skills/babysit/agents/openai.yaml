@@ -1,0 +1,5 @@
+interface:
+  display_name: "Babysit"
+  short_description: "Drive a PR to merge-ready without merging"
+policy:
+  allow_implicit_invocation: false
