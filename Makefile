@@ -1,10 +1,11 @@
-.PHONY: test install-agent-picker install-tmux-snapshot install-md-view install-skills build-md-view-css verify-md-view-css
+.PHONY: test install-agent-picker install-tmux-snapshot install-md-view install-skills test-skills build-md-view-css verify-md-view-css
 
 test:
 	go -C tools/agent-picker test ./...
 	go -C tools/tmux-snapshot test ./...
 	go -C tools/md-view test ./...
 	$(MAKE) verify-md-view-css
+	$(MAKE) test-skills
 
 install-agent-picker:
 	GOBIN=$(HOME)/.local/bin go -C tools/agent-picker install ./cmd/agent-picker
@@ -30,6 +31,11 @@ install-skills:
 	install -d "$(HOME)/.local/bin" "$(HOME)/.local/share/macos-dotfiles/skills"
 	install -m 755 scripts/skills "$(HOME)/.local/bin/skills"
 	install -m 644 skills/catalog.json "$(HOME)/.local/share/macos-dotfiles/skills/catalog.json"
+	rm -rf "$(HOME)/.local/share/macos-dotfiles/skills/overlays"
+	cp -R skills/overlays "$(HOME)/.local/share/macos-dotfiles/skills/overlays"
+
+test-skills:
+	sh tests/skills_test.sh
 
 tools/md-view/node_modules: tools/md-view/package.json tools/md-view/package-lock.json
 	npm ci --prefix tools/md-view

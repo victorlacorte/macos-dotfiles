@@ -243,66 +243,73 @@ make install-skills
 ```
 
 `skills/catalog.json` is the editable source recipe. `make install-skills`
-refreshes the installed copy at `$HOME/.local/share/macos-dotfiles/skills/catalog.json`.
-The wrapper uses the checkout catalog when run directly as
-`./scripts/skills`; set `SKILLS_CATALOG` to use another JSON catalog. Run the
-installed `skills` command from any directory:
+refreshes the installed copy at `$HOME/.local/share/macos-dotfiles/skills/catalog.json`
+and copies `skills/overlays` next to it. The wrapper uses the checkout catalog
+when run directly as `./scripts/skills`; set `SKILLS_CATALOG` to use another
+JSON catalog. Run the installed `skills` command from any directory:
 
 ```sh
 skills install unslop
-skills install --all --harness both
-skills install gh-stack --harness cursor --scope user
+skills install --all
+skills install unslop --scope project
 ```
 
-By default, installs go to `~/.agents/skills`. Codex and Cursor both discover
-that shared directory, so `--harness both` installs one copy. Shared installs
-and Codex user installs reject a directory symlink at that destination.
-Cursor-only user installs use `~/.cursor/skills` and are not blocked by the
-shared directory's current Stow link. Selecting one harness uses its native
-location; it does not hide that skill from another host that also discovers
-the location. User installs target the home directory. Project installs target
-the Git root's `.agents/skills`, even when you run the command from a
-subdirectory. Project installs reject a directory symlink at the repository
-destination. For example, run `skills install unslop --scope project` from a
-Git repository. `--all` means the six names in the local
-catalog, not every skill in their upstream repositories.
+`agents/.agents/skills` holds only locally authored skills (currently
+`orchestrate`). `.gitignore` allowlists that directory; add a new authored
+skill to the allowlist. Upstream skills come only from `skills/catalog.json`.
+
+Installs go to `~/.agents/skills`, or the Git root's `.agents/skills` with
+`--scope project`. Codex and Cursor both read that directory, so one copy
+serves both. Every skill there is visible to both harnesses; to keep a skill
+out of automatic use, Cursor honors `disable-model-invocation: true` in
+`SKILL.md` and Codex honors `policy.allow_implicit_invocation: false` in
+`agents/openai.yaml` (add the latter through an overlay). User installs
+target the home directory. Project installs target the Git root's
+`.agents/skills`, even when you run the command from a subdirectory.
+Installs reject a directory symlink at that destination. `--all` means the
+six names in the local catalog, not every skill in their upstream
+repositories.
+
+`skills install` only installs missing catalog skills and skips installed
+ones. `skills update` refreshes installed ones (skipping, with a notice,
+catalog skills that aren't installed for `--all`) and re-applies overlays.
+Removing an overlay directory and running `skills update NAME` removes its
+files.
+
+`skills/overlays/<name>/` holds files added on top of an installed upstream
+skill when upstream does not ship them, such as `unslop`'s
+`agents/openai.yaml` for Codex. Never copy upstream files there. The wrapper
+tracks applied overlay paths in `.skills-overlay` inside the skill directory,
+re-applies them on update, and skips (with a warning) any overlay file that
+upstream starts shipping.
 
 The wrapper delegates to GitHub CLI. Installed directories retain upstream
 `SKILL.md`, optional `agents/openai.yaml`, supporting files, any license files
 included in those directories, and GitHub source metadata. Review changed
-upstream instructions when updating. Update the six curated skills with GitHub
-CLI's native command:
+upstream instructions when updating. Update catalog skills with the wrapper,
+not raw `gh skill update`, because GitHub CLI replaces the skill directory
+and drops overlay files:
 
 ```sh
-gh skill update unslop code-review domain-modeling grilling grill-with-docs gh-stack --dry-run
-gh skill update unslop code-review domain-modeling grilling grill-with-docs gh-stack
+skills update --all --dry-run
+skills update --all
 ```
 
-By default, `gh skill update` searches known host locations. Use `--dir PATH`
-to limit it to one directory. GitHub CLI resolves the latest release when
-available, otherwise the default branch head. Review the upstream changes.
-`gh skill list` shows the skills GitHub CLI finds in its known locations.
+The wrapper passes `--dir` for the selected scope. GitHub CLI resolves the
+latest release when available, otherwise the default branch head. Review the
+upstream changes. `gh skill list` shows the skills GitHub CLI finds in its
+known locations.
 
-### Existing Stow setup
-
-The current `~/.agents/skills` may be a Stow link to this checkout. Shared
-installs and Codex user installs require a real directory and refuse that link.
-Before using the shared default, inspect and back up the whole directory,
-including ignored `gh-stack` files and any unknown or private skills. Move
-downloaded upstream directories out of the Stow source and preserve any local
-edits before removing tracked snapshots. Keep authored `orchestrate` and
-`reviewable-prs` content. Reinstall upstream skills through `gh skill install`
-so GitHub CLI records their source metadata.
-
-Preview the Stow change before applying it:
+Earlier checkouts linked upstream skills into `~/.agents/skills` through
+Stow. After those skills were removed from the package, the leftover
+symlinks dangle, and the wrapper refuses to install over a symlinked skill
+directory. Remove the dangling links, then reinstall. The `orchestrate`
+link still resolves, so it is left in place. Also remove duplicate copies
+left in `~/.cursor/skills` by earlier Cursor-only installs (Cursor would
+otherwise see each skill twice), for example by deleting the catalog skill
+directories there.
 
 ```sh
-stow --no --verbose --restow --no-folding --target="$HOME" agents
+find "$HOME/.agents/skills" -maxdepth 1 -type l ! -exec test -e {} \; -print -delete
+skills install --all
 ```
-
-After reviewing the preview and arranging the backed-up files, make
-`~/.agents/skills` a real directory and apply the reviewed no-folding restow.
-`--no-folding` keeps Stow from folding the package directory into the target;
-it does not move existing files. Remove skill-specific notice text and the
-obsolete `gh-stack` ignore entry only after the upstream payloads have moved.
-Keep the adapter and Tailwind notices.
