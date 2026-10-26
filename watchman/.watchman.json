@@ -1,0 +1,6 @@
+{
+  "ignore_dirs": [
+    "node_modules"
+  ],
+  "idle_reap_age_seconds": 3600
+}
