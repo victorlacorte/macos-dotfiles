@@ -1,6 +1,7 @@
 *.local
 agents/.agents/skills/*
 !agents/.agents/skills/orchestrate/
+!agents/.agents/skills/babysit/
 karabiner/.config/karabiner/automatic_backups/
 node_modules/
 nvim.log

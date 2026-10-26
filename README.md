@@ -255,8 +255,9 @@ skills install unslop --scope project
 ```
 
 `agents/.agents/skills` holds only locally authored skills (currently
-`orchestrate`). `.gitignore` allowlists that directory; add a new authored
-skill to the allowlist. Upstream skills come only from `skills/catalog.json`.
+`orchestrate` and `babysit`). `.gitignore` allowlists that directory; add
+a new authored skill to the allowlist. Upstream skills come only from
+`skills/catalog.json`.
 
 Installs go to `~/.agents/skills`, or the Git root's `.agents/skills` with
 `--scope project`. Codex and Cursor both read that directory, so one copy
