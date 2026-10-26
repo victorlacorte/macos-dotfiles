@@ -1,5 +1,6 @@
 *.local
-agents/.agents/skills/gh-stack/
+agents/.agents/skills/*
+!agents/.agents/skills/orchestrate/
 karabiner/.config/karabiner/automatic_backups/
 node_modules/
 nvim.log

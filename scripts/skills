@@ -5,11 +5,11 @@ set -u
 usage() {
   cat <<'EOF'
 Usage:
-  skills install NAME [--harness codex|cursor|both] [--scope user|project]
-  skills install --all [--harness codex|cursor|both] [--scope user|project]
+  skills install NAME|--all [--scope user|project]
+  skills update NAME|--all [--scope user|project] [--dry-run]
   skills --help
 
-Defaults: --harness both --scope user
+Defaults: --scope user
 EOF
 }
 
@@ -18,13 +18,91 @@ fail() {
   exit 2
 }
 
+rm_empty_parents() {
+  _root=$1
+  _rel=$2
+  _parent=$(dirname -- "$_rel")
+  while [ "$_parent" != "." ] && [ "$_parent" != "/" ]; do
+    rmdir "$_root/$_parent" 2>/dev/null || true
+    _parent=$(dirname -- "$_parent")
+  done
+}
+
+strip_overlay() {
+  _dir=$1
+  _marker=$_dir/.skills-overlay
+  [ -f "$_marker" ] || return 0
+  while IFS= read -r _p || [ -n "$_p" ]; do
+    [ -n "$_p" ] || continue
+    rm -f "$_dir/$_p"
+    rm_empty_parents "$_dir" "$_p"
+  done < "$_marker"
+  rm -f "$_marker"
+}
+
+apply_overlay() {
+  _name=$1
+  _dir=$2
+  _src=$overlays_dir/$_name
+  if [ ! -f "$_dir/SKILL.md" ]; then
+    printf 'skills: no SKILL.md in %s; skipping overlay\n' "$_dir" >&2
+    return 0
+  fi
+  if [ ! -d "$_src" ]; then
+    strip_overlay "$_dir"
+    return 0
+  fi
+
+  _marker=$_dir/.skills-overlay
+  _found=$work_dir/found
+  _rels=$work_dir/rels
+  _applied=$work_dir/applied
+  find "$_src" -type f | sort > "$_found"
+  : > "$_rels"
+  : > "$_applied"
+
+  while IFS= read -r _f || [ -n "$_f" ]; do
+    [ -n "$_f" ] || continue
+    [ -f "$_f" ] || fail "overlay path contains a newline"
+    _p=${_f#"$_src"/}
+    printf '%s\n' "$_p" >> "$_rels"
+
+    if [ -e "$_dir/$_p" ] && { [ ! -f "$_marker" ] || ! grep -Fxq -- "$_p" "$_marker"; }; then
+      printf 'skills: overlay file %s is provided upstream; skipping (remove it from the overlay)\n' "$_p" >&2
+      continue
+    fi
+    mkdir -p "$(dirname -- "$_dir/$_p")"
+    cp "$_f" "$_dir/$_p"
+    printf '%s\n' "$_p" >> "$_applied"
+  done < "$_found"
+
+  if [ -f "$_marker" ]; then
+    while IFS= read -r _old || [ -n "$_old" ]; do
+      [ -n "$_old" ] || continue
+      grep -Fxq -- "$_old" "$_rels" && continue
+      rm -f "$_dir/$_old"
+      rm_empty_parents "$_dir" "$_old"
+    done < "$_marker"
+  fi
+
+  if [ -s "$_applied" ]; then
+    cp "$_applied" "$_marker"
+  else
+    rm -f "$_marker"
+  fi
+}
+
 if [ "$#" -eq 1 ] && { [ "$1" = "--help" ] || [ "$1" = "-h" ]; }; then
   usage
   exit 0
 fi
 
 [ "$#" -ge 2 ] || { usage >&2; exit 2; }
-[ "$1" = "install" ] || fail "unknown command '$1'"
+skills_cmd=$1
+case "$skills_cmd" in
+  install|update) ;;
+  *) fail "unknown command '$skills_cmd'" ;;
+esac
 shift
 
 if [ "$#" -eq 1 ] && { [ "$1" = "--help" ] || [ "$1" = "-h" ]; }; then
@@ -34,19 +112,12 @@ fi
 
 selection=$1
 shift
-harness=both
 scope=user
-seen_harness=0
 seen_scope=0
+seen_dry_run=0
+dry_run=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --harness)
-      [ "$seen_harness" -eq 0 ] || fail "--harness may be specified once"
-      [ "$#" -ge 2 ] || fail "--harness requires a value"
-      harness=$2
-      seen_harness=1
-      shift 2
-      ;;
     --scope)
       [ "$seen_scope" -eq 0 ] || fail "--scope may be specified once"
       [ "$#" -ge 2 ] || fail "--scope requires a value"
@@ -54,22 +125,31 @@ while [ "$#" -gt 0 ]; do
       seen_scope=1
       shift 2
       ;;
+    --dry-run)
+      [ "$skills_cmd" = update ] || fail "--dry-run is only valid for update"
+      [ "$seen_dry_run" -eq 0 ] || fail "--dry-run may be specified once"
+      dry_run=1
+      seen_dry_run=1
+      shift
+      ;;
     *) fail "unknown option '$1'" ;;
   esac
 done
 
-case "$harness" in codex|cursor|both) ;; *) fail "invalid harness '$harness' (use codex, cursor, or both)" ;; esac
 case "$scope" in user|project) ;; *) fail "invalid scope '$scope' (use user or project)" ;; esac
 if [ "$selection" != "--all" ] && case "$selection" in -*|'') true ;; *) false ;; esac; then
   fail "choose one skill name or --all"
 fi
 
+work_dir=$(mktemp -d) || exit 1
+trap 'rm -rf "$work_dir"' EXIT
+
 command -v jq >/dev/null 2>&1 || { printf 'skills: jq is required\n' >&2; exit 127; }
 if [ "${SKILLS_CATALOG+x}" = x ]; then
   catalog=$SKILLS_CATALOG
 else
-  script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
-  repo_root=$(CDPATH= cd -- "$script_dir/.." && pwd) || exit 1
+  script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd) || exit 1
+  repo_root=$(CDPATH='' cd -- "$script_dir/.." && pwd) || exit 1
   if [ -f "$repo_root/skills/catalog.json" ]; then
     catalog=$repo_root/skills/catalog.json
   else
@@ -77,6 +157,7 @@ else
   fi
 fi
 [ -f "$catalog" ] || fail "catalog not found at '$catalog'"
+overlays_dir=$(dirname -- "$catalog")/overlays
 
 # Validate the complete catalog before selecting entries or invoking gh.
 jq -e '
@@ -90,6 +171,15 @@ jq -e '
         (keys == ["repository", "selector"]))))
 ' "$catalog" >/dev/null 2>&1 || fail "invalid catalog JSON or unsupported schema in '$catalog'"
 
+if [ -d "$overlays_dir" ]; then
+  for _overlay_ent in "$overlays_dir"/*; do
+    [ -d "$_overlay_ent" ] || continue
+    _overlay_name=$(basename -- "$_overlay_ent")
+    jq -e --arg name "$_overlay_name" '.skills | has($name)' "$catalog" >/dev/null \
+      || fail "overlay '$_overlay_name' does not match a catalog skill"
+  done
+fi
+
 if [ "$selection" = "--all" ]; then
   selected=$(jq -r '.skills | keys[]' "$catalog") || fail "cannot read catalog"
 else
@@ -99,31 +189,71 @@ fi
 
 if [ "$scope" = project ]; then
   project_root=$(git rev-parse --show-toplevel 2>/dev/null) || fail "project scope requires a Git work tree"
-  shared_dir=$project_root/.agents/skills
+  destination=$project_root/.agents/skills
 else
-  shared_dir=$HOME/.agents/skills
+  destination=$HOME/.agents/skills
 fi
 
-if [ "$scope" = project ] || [ "$harness" = both ] || [ "$harness" = codex ]; then
-  if [ -L "$shared_dir" ]; then
-    fail "shared skills directory '$shared_dir' is a symlink; run the documented Stow no-folding migration first"
-  fi
+if [ -L "$destination" ]; then
+  fail "shared skills directory '$destination' is a symlink; replace it with a real directory (for example, restow agents with stow --no-folding)"
 fi
+
+names=
+for name in $selected; do
+  if [ -L "$destination/$name" ]; then
+    fail "'$destination/$name' is a symlink; remove the leftover link before installing"
+  fi
+  if [ "$skills_cmd" = install ]; then
+    if [ -f "$destination/$name/SKILL.md" ]; then
+      printf "%s is already installed in %s; use 'skills update %s' to refresh\n" \
+        "$name" "$destination" "$name"
+      continue
+    fi
+    if [ -e "$destination/$name" ]; then
+      fail "'$destination/$name' exists but has no SKILL.md; remove it and retry"
+    fi
+  else
+    if [ ! -f "$destination/$name/SKILL.md" ]; then
+      if [ "$selection" = "--all" ]; then
+        printf 'skills: skipping %s: not installed in %s\n' "$name" "$destination" >&2
+        continue
+      fi
+      fail "'$name' is not installed in '$destination'; run 'skills install $name'"
+    fi
+  fi
+  names="${names:+$names }$name"
+done
 
 command -v gh >/dev/null 2>&1 || { printf 'skills: gh is required\n' >&2; exit 127; }
 
-for name in $selected; do
+if [ "$skills_cmd" = update ]; then
+  if [ -z "$names" ]; then
+    printf "No catalog skills installed in %s\n" "$destination"
+    exit 0
+  fi
+  # shellcheck disable=SC2086 # Keep unquoted: catalog keys are validated as [a-z0-9-] and must split into one argument each.
+  set -- $names
+  if [ "$dry_run" -eq 1 ]; then
+    gh skill update --dir "$destination" --dry-run "$@"
+  else
+    gh skill update --dir "$destination" "$@"
+  fi
+  gh_status=$?
+  if [ "$dry_run" -eq 0 ]; then
+    for name in $names; do
+      apply_overlay "$name" "$destination/$name"
+    done
+  fi
+  exit "$gh_status"
+fi
+
+for name in $names; do
+  skill_dir=$destination/$name
   repository=$(jq -r --arg name "$name" '.skills[$name].repository' "$catalog") || fail "cannot read '$name' from catalog"
   selector=$(jq -r --arg name "$name" '.skills[$name].selector' "$catalog") || fail "cannot read '$name' from catalog"
-  if [ "$harness" = both ]; then
-    printf "Installing %s to %s (Codex and Cursor)\n" "$name" "$shared_dir"
-    gh skill install "$repository" "$selector" --dir "$shared_dir" || exit $?
-  else
-    destination=$shared_dir
-    if [ "$harness" = cursor ] && [ "$scope" = user ]; then
-      destination=$HOME/.cursor/skills
-    fi
-    printf "Installing %s to %s for %s (%s scope)\n" "$name" "$destination" "$harness" "$scope"
-    gh skill install "$repository" "$selector" --agent "$harness" --scope "$scope" || exit $?
-  fi
+  printf "Installing %s to %s\n" "$name" "$destination"
+  gh skill install "$repository" "$selector" --dir "$destination"
+  gh_status=$?
+  [ "$gh_status" -eq 0 ] || exit "$gh_status"
+  apply_overlay "$name" "$skill_dir"
 done
