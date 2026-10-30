@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"time"
 )
 
 type Command struct {
@@ -39,17 +38,8 @@ func (OSRunner) Run(ctx context.Context, command Command) (string, error) {
 	return stdout.String(), err
 }
 
-type Clock interface {
-	Now() time.Time
-}
-
-type RealClock struct{}
-
-func (RealClock) Now() time.Time { return time.Now() }
-
 type App struct {
 	Runner Runner
-	Clock  Clock
 	Home   string
 
 	Stdout io.Writer
@@ -60,7 +50,6 @@ func NewApp() *App {
 	home, _ := os.UserHomeDir()
 	return &App{
 		Runner: OSRunner{},
-		Clock:  RealClock{},
 		Home:   home,
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,

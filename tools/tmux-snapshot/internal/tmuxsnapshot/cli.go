@@ -7,8 +7,8 @@ import (
 
 func (a *App) printUsage() {
 	fmt.Fprintln(a.Stderr, "Usage:")
-	fmt.Fprintln(a.Stderr, "  tmux-snapshot save [FILE]")
-	fmt.Fprintln(a.Stderr, "  tmux-snapshot restore [FILE]")
+	fmt.Fprintln(a.Stderr, "  tmux-snapshot save")
+	fmt.Fprintln(a.Stderr, "  tmux-snapshot restore")
 }
 
 func (a *App) fatal(err error) int {
@@ -17,41 +17,21 @@ func (a *App) fatal(err error) int {
 }
 
 func (a *App) Main(ctx context.Context, args []string) int {
-	if len(args) == 0 {
+	if len(args) != 1 {
 		a.printUsage()
 		return 2
 	}
 
 	switch args[0] {
 	case "save":
-		if len(args) > 2 {
-			a.printUsage()
-			return 2
-		}
-		requested := ""
-		if len(args) == 2 {
-			requested = args[1]
-		}
-		path, err := a.Save(ctx, requested)
+		path, err := a.Save(ctx)
 		if err != nil {
 			return a.fatal(err)
 		}
 		fmt.Fprintln(a.Stdout, path)
 		return 0
 	case "restore":
-		if len(args) > 2 {
-			a.printUsage()
-			return 2
-		}
-		requested := ""
-		if len(args) == 2 {
-			requested = args[1]
-		}
-		path, err := a.resolveSnapshot(requested)
-		if err != nil {
-			return a.fatal(err)
-		}
-		if err := a.restoreSnapshot(ctx, path); err != nil {
+		if err := a.Restore(ctx); err != nil {
 			return a.fatal(err)
 		}
 		return 0
