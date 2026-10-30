@@ -12,7 +12,7 @@ const (
 	recordSeparator = "\x1e"
 )
 
-func splitTmuxRecords(output string) ([][]string, error) {
+func splitTmuxRecords(output string) [][]string {
 	var records [][]string
 	for index, record := range strings.Split(output, recordSeparator) {
 		if index > 0 {
@@ -24,7 +24,7 @@ func splitTmuxRecords(output string) ([][]string, error) {
 		}
 		records = append(records, strings.Split(record, unitSeparator))
 	}
-	return records, nil
+	return records
 }
 
 func parseSessionAttached(value string) (bool, error) {
@@ -36,12 +36,8 @@ func parseSessionAttached(value string) (bool, error) {
 }
 
 func parseSavedSessions(output string) ([]Session, error) {
-	records, err := splitTmuxRecords(output)
-	if err != nil {
-		return nil, err
-	}
+	records := splitTmuxRecords(output)
 	sessions := make([]Session, 0, len(records))
-	names := make(map[string]struct{}, len(records))
 	for _, fields := range records {
 		if len(fields) != 3 {
 			return nil, fmt.Errorf("session record has %d fields, want 3", len(fields))
@@ -50,16 +46,6 @@ func parseSavedSessions(output string) ([]Session, error) {
 		if err != nil {
 			return nil, err
 		}
-		if fields[0] == "" {
-			return nil, fmt.Errorf("session has an empty name")
-		}
-		if fields[1] == "" {
-			return nil, fmt.Errorf("session %q has an empty path", fields[0])
-		}
-		if _, exists := names[fields[0]]; exists {
-			return nil, fmt.Errorf("duplicate session %q", fields[0])
-		}
-		names[fields[0]] = struct{}{}
 		sessions = append(sessions, Session{Name: fields[0], Path: fields[1], Attached: attached})
 	}
 	if len(sessions) == 0 {
@@ -82,17 +68,10 @@ func (a *App) captureSnapshot(ctx context.Context) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 
-	snapshot := Snapshot{Version: snapshotVersion, Sessions: make([]Session, 0, len(sessions))}
-	for _, session := range sessions {
-		snapshot.Sessions = append(snapshot.Sessions, session)
-	}
-	if err := snapshot.Validate(); err != nil {
-		return Snapshot{}, err
-	}
-	return snapshot, nil
+	return Snapshot{Version: snapshotVersion, Sessions: sessions}, nil
 }
 
-func (a *App) Save(ctx context.Context, requested string) (string, error) {
+func (a *App) Save(ctx context.Context) (string, error) {
 	snapshot, err := a.captureSnapshot(ctx)
 	if err != nil {
 		return "", err
@@ -101,5 +80,5 @@ func (a *App) Save(ctx context.Context, requested string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return a.writeSnapshot(requested, data)
+	return a.writeSnapshot(data)
 }

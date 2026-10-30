@@ -37,7 +37,8 @@ func (a *App) restoreSession(ctx context.Context, session Session) (bool, error)
 	return true, nil
 }
 
-func (a *App) restoreSnapshot(ctx context.Context, path string) error {
+func (a *App) Restore(ctx context.Context) error {
+	path := a.snapshotPath()
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("snapshot does not exist: %s", path)
 	}

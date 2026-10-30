@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 )
 
 type fakeRunner struct {
@@ -36,16 +35,9 @@ func (r *fakeRunner) Commands() []Command {
 	return append([]Command(nil), r.commands...)
 }
 
-type fakeClock struct {
-	now time.Time
-}
-
-func (c fakeClock) Now() time.Time { return c.now }
-
 func testApp(runner Runner, home string) *App {
 	return &App{
 		Runner: runner,
-		Clock:  fakeClock{now: time.Date(2026, 8, 12, 13, 6, 0, 0, time.UTC)},
 		Home:   home,
 		Stdout: &strings.Builder{},
 		Stderr: &strings.Builder{},
@@ -100,11 +92,11 @@ func TestSaveUsesOneTmuxCallAndPreservesSessionData(t *testing.T) {
 	}
 	app := testApp(runner, t.TempDir())
 
-	path, err := app.Save(context.Background(), "")
+	path, err := app.Save(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantPath := filepath.Join(stateHome, "tmux-snapshot", "20260812T130600Z.json")
+	wantPath := filepath.Join(stateHome, "tmux-snapshot", "latest")
 	if path != wantPath {
 		t.Fatalf("snapshot path: got %q, want %q", path, wantPath)
 	}
@@ -147,13 +139,6 @@ func TestSaveUsesOneTmuxCallAndPreservesSessionData(t *testing.T) {
 	if mode := fileMode(t, path); mode != 0o600 {
 		t.Fatalf("snapshot mode: got %o, want 600", mode)
 	}
-	target, err := os.Readlink(filepath.Join(filepath.Dir(path), "latest"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if target != filepath.Base(path) {
-		t.Fatalf("latest target: got %q, want %q", target, filepath.Base(path))
-	}
 }
 
 func TestSaveRejectsInvalidSessionAttachedCount(t *testing.T) {
@@ -167,46 +152,119 @@ func TestSaveRejectsInvalidSessionAttachedCount(t *testing.T) {
 				},
 			}
 			app := testApp(runner, t.TempDir())
-			if _, err := app.Save(context.Background(), ""); err == nil {
+			if _, err := app.Save(context.Background()); err == nil {
 				t.Fatal("save unexpectedly succeeded")
 			}
 		})
 	}
 }
 
-func TestSaveCollisionSuffixAndDefaultResolution(t *testing.T) {
-	stateHome := t.TempDir()
-	t.Setenv("XDG_STATE_HOME", stateHome)
-	runner := &fakeRunner{
-		handler: func(command Command) (string, error) {
-			if command.Args[0] != "list-sessions" {
-				return "", fmt.Errorf("unexpected tmux command: %#v", command)
+func TestSaveReplacesSnapshotAndPreservesItOnFailure(t *testing.T) {
+	for _, useXDG := range []bool{true, false} {
+		t.Run(fmt.Sprintf("XDG=%t", useXDG), func(t *testing.T) {
+			home := t.TempDir()
+			base := filepath.Join(home, ".local", "state")
+			t.Setenv("XDG_STATE_HOME", "")
+			if useXDG {
+				base = t.TempDir()
+				t.Setenv("XDG_STATE_HOME", base)
 			}
-			return tmuxOutput([]string{"work", "/tmp", "0"}), nil
-		},
+			name := "first"
+			var saveErr error
+			runner := &fakeRunner{handler: func(command Command) (string, error) {
+				switch command.Args[0] {
+				case "list-sessions":
+					return tmuxOutput([]string{name, home, "0"}), saveErr
+				case "has-session":
+					return "", errors.New("missing")
+				case "new-session":
+					return "", nil
+				default:
+					return "", fmt.Errorf("unexpected tmux command: %#v", command)
+				}
+			}}
+			app := testApp(runner, home)
+			for _, savedName := range []string{"first", "second"} {
+				name = savedName
+				if code := app.Main(context.Background(), []string{"save"}); code != 0 {
+					t.Fatalf("save exited %d: %s", code, app.Stderr)
+				}
+			}
+			saveErr = errors.New("tmux unavailable")
+			if code := app.Main(context.Background(), []string{"save"}); code != 1 {
+				t.Fatalf("failed save exited %d, want 1", code)
+			}
+			if code := app.Main(context.Background(), []string{"restore"}); code != 0 {
+				t.Fatalf("restore exited %d: %s", code, app.Stderr)
+			}
+			commands := runner.Commands()
+			if !commandHas(commands, "tmux", "new-session", "-d", "-s", "second", "-c", home) ||
+				commandHas(commands, "tmux", "new-session", "-d", "-s", "first", "-c", home) {
+				t.Fatalf("restore did not use the last successful save: %#v", commands)
+			}
+			entries, err := os.ReadDir(filepath.Join(base, "tmux-snapshot"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(entries) != 1 || entries[0].Name() != "latest" || !entries[0].Type().IsRegular() {
+				t.Fatalf("expected only a regular latest file, got %v", entries)
+			}
+		})
 	}
-	app := testApp(runner, t.TempDir())
-	first, err := app.Save(context.Background(), "")
+}
+
+func TestLegacyLatestSymlink(t *testing.T) {
+	dir := t.TempDir()
+	writeTestSnapshot(t, Snapshot{Version: 2, Sessions: []Session{{Name: "old", Path: dir}}})
+	runner := &fakeRunner{handler: func(command Command) (string, error) {
+		if command.Args[0] == "has-session" {
+			return "", nil
+		}
+		return tmuxOutput([]string{"new", dir, "0"}), nil
+	}}
+	app := testApp(runner, "")
+	latest := app.snapshotPath()
+	old := filepath.Join(filepath.Dir(latest), "20260812T130600Z.json")
+	if err := os.Rename(latest, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.Restore(context.Background()); err == nil {
+		t.Fatal("restore unexpectedly fell back to an old snapshot")
+	}
+	if len(runner.Commands()) != 0 {
+		t.Fatal("restore invoked tmux without a latest snapshot")
+	}
+	if err := os.Symlink(filepath.Base(old), latest); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.Restore(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !commandHas(runner.Commands(), "tmux", "has-session", "-t", "=old") {
+		t.Fatal("restore did not read the legacy latest symlink")
+	}
+	if _, err := app.Save(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Lstat(latest)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := app.Save(context.Background(), "")
-	if err != nil {
-		t.Fatal(err)
+	if !info.Mode().IsRegular() {
+		t.Fatal("save did not replace the legacy latest symlink with a regular file")
 	}
-	if filepath.Base(first) != "20260812T130600Z.json" ||
-		filepath.Base(second) != "20260812T130600Z-1.json" {
-		t.Fatalf("collision paths: %q, %q", first, second)
-	}
-	resolved, err := app.resolveSnapshot("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resolved != filepath.Join(stateHome, "tmux-snapshot", "latest") {
-		t.Fatalf("resolved default: got %q", resolved)
-	}
-	if commandCount(runner.Commands(), "tmux") != 2 {
-		t.Fatalf("save made an unexpected number of tmux calls: %#v", runner.Commands())
+	for path, wantName := range map[string]string{old: "old", latest: "new"} {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		snapshot, err := decodeSnapshot(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if snapshot.Sessions[0].Name != wantName {
+			t.Fatalf("%s: got session %q, want %q", path, snapshot.Sessions[0].Name, wantName)
+		}
 	}
 }
 
@@ -247,7 +305,7 @@ func TestRestoreCreatesOneDefaultWindowPerMissingSession(t *testing.T) {
 		Version:  2,
 		Sessions: []Session{{Name: "work", Path: dir}},
 	}
-	file := writeTestSnapshot(t, snapshot)
+	writeTestSnapshot(t, snapshot)
 	runner := &fakeRunner{
 		handler: func(command Command) (string, error) {
 			if command.Args[0] == "has-session" {
@@ -260,7 +318,7 @@ func TestRestoreCreatesOneDefaultWindowPerMissingSession(t *testing.T) {
 		},
 	}
 	app := testApp(runner, t.TempDir())
-	if err := app.restoreSnapshot(context.Background(), file); err != nil {
+	if err := app.Restore(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	commands := runner.Commands()
@@ -287,7 +345,7 @@ func TestRestoreCreatesMissingSessionsInSnapshotOrder(t *testing.T) {
 			{Name: "middle", Path: dir},
 		},
 	}
-	file := writeTestSnapshot(t, snapshot)
+	writeTestSnapshot(t, snapshot)
 	for _, test := range []struct {
 		name     string
 		existing string
@@ -313,7 +371,7 @@ func TestRestoreCreatesMissingSessionsInSnapshotOrder(t *testing.T) {
 				},
 			}
 			app := testApp(runner, t.TempDir())
-			if err := app.restoreSnapshot(context.Background(), file); err != nil {
+			if err := app.Restore(context.Background()); err != nil {
 				t.Fatal(err)
 			}
 
@@ -342,7 +400,7 @@ func TestRestoreSkipsExistingAndMissingSessionsAndContinuesAfterFailure(t *testi
 			{Name: "later", Path: dir},
 		},
 	}
-	file := writeTestSnapshot(t, snapshot)
+	writeTestSnapshot(t, snapshot)
 	runner := &fakeRunner{
 		handler: func(command Command) (string, error) {
 			switch command.Args[0] {
@@ -365,7 +423,7 @@ func TestRestoreSkipsExistingAndMissingSessionsAndContinuesAfterFailure(t *testi
 	app := testApp(runner, t.TempDir())
 	app.Stderr = stderr
 	t.Setenv("TMUX", "")
-	if err := app.restoreSnapshot(context.Background(), file); err == nil {
+	if err := app.Restore(context.Background()); err == nil {
 		t.Fatal("restore unexpectedly succeeded")
 	}
 	commands := runner.Commands()
@@ -397,7 +455,7 @@ func TestRestoreAttachesLastNewlyRestoredAttachedSession(t *testing.T) {
 			{Name: "last", Path: dir, Attached: true},
 		},
 	}
-	file := writeTestSnapshot(t, snapshot)
+	writeTestSnapshot(t, snapshot)
 	for _, test := range []struct {
 		name        string
 		tmux        string
@@ -418,7 +476,7 @@ func TestRestoreAttachesLastNewlyRestoredAttachedSession(t *testing.T) {
 				},
 			}
 			app := testApp(runner, t.TempDir())
-			if err := app.restoreSnapshot(context.Background(), file); err != nil {
+			if err := app.Restore(context.Background()); err != nil {
 				t.Fatal(err)
 			}
 			commands := runner.Commands()
@@ -442,7 +500,9 @@ func TestCLIUsageAndErrors(t *testing.T) {
 	app := testApp(&fakeRunner{}, t.TempDir())
 	for _, args := range [][]string{
 		nil,
+		{"save", "one"},
 		{"save", "one", "two"},
+		{"restore", "one"},
 		{"restore", "one", "two"},
 		{"bogus"},
 	} {
@@ -452,17 +512,16 @@ func TestCLIUsageAndErrors(t *testing.T) {
 	}
 }
 
-func writeTestSnapshot(t *testing.T, snapshot Snapshot) string {
+func writeTestSnapshot(t *testing.T, snapshot Snapshot) {
 	t.Helper()
 	data, err := encodeSnapshot(snapshot)
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(t.TempDir(), "snapshot.json")
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	if _, err := testApp(nil, "").writeSnapshot(data); err != nil {
 		t.Fatal(err)
 	}
-	return path
 }
 
 func fileMode(t *testing.T, path string) os.FileMode {

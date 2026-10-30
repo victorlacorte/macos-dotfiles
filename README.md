@@ -179,19 +179,16 @@ default shell window for each missing session. Windows, panes, commands or
 processes, layouts, and scrollback are not captured.
 
 Snapshots use version 2. Version 1 snapshots are not supported. After
-upgrading, run `tmux-snapshot save` before using the default restore command;
+upgrading from version 1, run `tmux-snapshot save` before restoring;
 old snapshot files remain on disk and are not rewritten.
 
-Snapshots are stored in
-`${XDG_STATE_HOME:-$HOME/.local/state}/tmux-snapshot/`. The `latest` symlink is
-used by restore when no file is provided; if it is missing, restore falls back to
-the newest `.json` file in that directory. Snapshots are JSON files named with
-their UTC save time. Pass a file path to either command to save or restore a
-specific snapshot. There is no picker: selecting an older snapshot means naming
-its path.
+The snapshot is stored as JSON at
+`${XDG_STATE_HOME:-$HOME/.local/state}/tmux-snapshot/latest`. Each save
+atomically replaces this file. Neither command accepts a file path.
 
-Saving to an explicit path does not update the `latest` symlink, so such a
-snapshot never becomes the default for restore.
+An existing `latest` symlink from an older installation can still be restored;
+the next save replaces the symlink with a regular file. Old timestamped
+snapshots remain on disk but are no longer used.
 
 Restore only adds sessions. A session whose name already exists is left
 untouched, and one whose recorded path no longer exists is skipped with a
