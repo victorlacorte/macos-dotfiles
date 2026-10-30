@@ -9,3 +9,6 @@ trim_trailing_whitespace = true
 [*.{lua}]
 indent_size = 2
 indent_style = space
+
+[*.{md,mdx}]
+trim_trailing_whitespace = false
