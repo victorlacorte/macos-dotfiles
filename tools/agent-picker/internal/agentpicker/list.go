@@ -57,6 +57,17 @@ func (snapshot agentSnapshot) rows() string {
 	return strings.Join(rows, "\n") + "\n"
 }
 
+func (snapshot agentSnapshot) selectionRows() string {
+	rows := FormatRows(snapshot.agents, snapshot.now)
+	for i, agent := range snapshot.agents {
+		rows[i] += "\t" + agent.Identity
+	}
+	if len(rows) == 0 {
+		return ""
+	}
+	return strings.Join(rows, "\n") + "\n"
+}
+
 func (a *App) Agents(ctx context.Context, provider string) []Agent {
 	return a.snapshot(ctx, provider).agents
 }

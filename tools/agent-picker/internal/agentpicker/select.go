@@ -39,7 +39,7 @@ func (a *App) Select(ctx context.Context, provider string) {
 		"--delimiter=\\t", "--with-nth=1,3,4,5,6", "--reverse", "--cycle",
 		"--header=" + header,
 		"--preview=tmux capture-pane -ept {1}", "--preview-window=up,70%,follow",
-		`--bind=ctrl-x:execute-silent(kill {2})+reload(sleep 0.3; "$AGENT_PICKER" list -provider "$AGENT_PICKER_PROVIDER")`,
+		`--bind=ctrl-x:execute-silent("$AGENT_PICKER" terminate -provider {3} -pane {1} -pid {2} -identity {8})+reload(sleep 0.3; "$AGENT_PICKER" list -provider "$AGENT_PICKER_PROVIDER" -identities)`,
 	}
 	args = append(args, extra...)
 
@@ -55,7 +55,7 @@ func (a *App) Select(ctx context.Context, provider string) {
 			cancelDiscovery()
 			return
 		}
-		_, writeErr := io.WriteString(writer, snapshot.rows())
+		_, writeErr := io.WriteString(writer, snapshot.selectionRows())
 		_ = writer.CloseWithError(writeErr)
 		result <- discoveryResult{}
 	}()

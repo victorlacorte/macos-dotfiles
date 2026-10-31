@@ -18,6 +18,9 @@ func (a *App) Main(ctx context.Context, args []string) int {
 	}
 
 	command := args[0]
+	if command == "terminate" {
+		return a.terminateCommand(ctx, args[1:])
+	}
 	if command != "popup" && command != "select" && command != "list" {
 		fmt.Fprintf(a.Stderr, "agent-picker: unknown command %q\n", command)
 		a.printUsage()
@@ -27,6 +30,10 @@ func (a *App) Main(ctx context.Context, args []string) int {
 	flags := flag.NewFlagSet(command, flag.ContinueOnError)
 	flags.SetOutput(a.Stderr)
 	provider := flags.String("provider", "all", "provider to show ("+providerUsage+")")
+	var identities bool
+	if command == "list" {
+		flags.BoolVar(&identities, "identities", false, "include process identities for picker actions")
+	}
 	flags.Usage = func() { a.printCommandUsage(command, flags) }
 	if err := flags.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -67,7 +74,11 @@ func (a *App) Main(ctx context.Context, args []string) int {
 			flags.Usage()
 			return 2
 		}
-		a.List(ctx, *provider)
+		if identities {
+			fmt.Fprint(a.Stdout, a.snapshot(ctx, *provider).selectionRows())
+		} else {
+			a.List(ctx, *provider)
+		}
 	}
 	return 0
 }
@@ -81,6 +92,7 @@ func (a *App) printUsage() {
 	fmt.Fprintf(a.Stderr, "  agent-picker popup [-provider %s] [TMUX_CLIENT]\n", providerUsage)
 	fmt.Fprintf(a.Stderr, "  agent-picker select [-provider %s]\n", providerUsage)
 	fmt.Fprintf(a.Stderr, "  agent-picker list [-provider %s]\n", providerUsage)
+	fmt.Fprintln(a.Stderr, "  agent-picker terminate -provider PROVIDER -pane PANE -pid PID -identity IDENTITY")
 }
 
 func (a *App) printCommandUsage(command string, flags *flag.FlagSet) {
