@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -22,6 +23,8 @@ type Command struct {
 type Runner interface {
 	LookPath(string) (string, error)
 	Run(context.Context, Command) (string, error)
+	ProcessArgs(int) ([]string, error)
+	Terminate(int) error
 }
 
 type FileSystem interface {
@@ -38,6 +41,16 @@ type Clock interface {
 type OSRunner struct{}
 
 func (OSRunner) LookPath(name string) (string, error) { return exec.LookPath(name) }
+
+func (OSRunner) ProcessArgs(pid int) ([]string, error) { return processArgs(pid) }
+
+func (OSRunner) Terminate(pid int) error {
+	p, err := os.FindProcess(pid)
+	if err != nil {
+		return err
+	}
+	return p.Signal(syscall.SIGTERM)
+}
 
 func (OSRunner) Run(ctx context.Context, command Command) (string, error) {
 	cmd := exec.CommandContext(ctx, command.Name, command.Args...)

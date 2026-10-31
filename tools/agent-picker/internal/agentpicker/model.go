@@ -13,6 +13,7 @@ type Agent struct {
 	Provider string
 	Pane     string
 	PID      int
+	Identity string
 	Activity time.Time
 	Location string
 	Path     string
