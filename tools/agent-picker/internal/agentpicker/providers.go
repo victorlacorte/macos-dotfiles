@@ -11,12 +11,6 @@ import (
 	"time"
 )
 
-type process struct {
-	pid, ppid int
-	tty       string
-	command   string
-}
-
 type pane struct {
 	ID, Location, Path string
 }
@@ -41,6 +35,14 @@ func (a *App) startInventory(ctx context.Context) *discoveryInventory {
 	return inventory
 }
 
+type claudeSession struct {
+	PID       int    `json:"pid"`
+	SessionID string `json:"sessionId"`
+	CWD       string `json:"cwd"`
+	Kind      string `json:"kind"`
+	modified  time.Time
+}
+
 // The Claude adapter retains behavior adapted from
 // craftzdog/tmux-claude-session-manager. See THIRD_PARTY_NOTICES.md.
 func (a *App) collectClaudeAgents(ctx context.Context, inventory *discoveryInventory) []Agent {
@@ -49,45 +51,34 @@ func (a *App) collectClaudeAgents(ctx context.Context, inventory *discoveryInven
 		config = filepath.Join(a.Home, ".claude")
 	}
 	matches, _ := a.FS.Glob(filepath.Join(config, "sessions", "*.json"))
-	var records []struct {
-		PID       int    `json:"pid"`
-		SessionID string `json:"sessionId"`
-		CWD       string `json:"cwd"`
-		Kind      string `json:"kind"`
-	}
+	sessions := make(map[int]claudeSession)
 	for _, match := range matches {
 		data, err := a.FS.ReadFile(match)
 		if err != nil {
 			continue
 		}
-		var record struct {
-			PID       int    `json:"pid"`
-			SessionID string `json:"sessionId"`
-			CWD       string `json:"cwd"`
-			Kind      string `json:"kind"`
+		var record claudeSession
+		if json.Unmarshal(data, &record) != nil || record.Kind != "interactive" || record.SessionID == "" {
+			continue
 		}
-		if json.Unmarshal(data, &record) == nil {
-			records = append(records, record)
+		info, err := a.FS.Stat(match)
+		if err != nil || info.IsDir() {
+			continue
 		}
+		record.modified = info.ModTime()
+		sessions[record.PID] = record
 	}
-
 	inventory.wg.Wait()
-
+	leaders, _ := passiveSessions(inventory, func(p process) bool {
+		record, ok := sessions[p.pid]
+		// A record older than this process belongs to an earlier use of the PID.
+		return ok && record.modified.Unix() >= p.started.Unix() && a.claudeProcess(p)
+	})
 	var agents []Agent
-	for _, record := range records {
-		if record.Kind != "interactive" {
-			continue
-		}
-		process, ok := inventory.processes[record.PID]
-		if !ok {
-			continue
-		}
-		pane, ok := inventory.panes[process.tty]
-		if !ok {
-			continue
-		}
+	for tty, process := range leaders {
+		record, pane := sessions[process.pid], inventory.panes[tty]
 		agents = append(agents, Agent{
-			Provider: "claude", Pane: pane.ID, PID: record.PID,
+			Provider: "claude", Pane: pane.ID, PID: process.pid, Identity: process.identity(),
 			Activity: a.transcriptMTime(config, record.SessionID),
 			Location: pane.Location, Path: shortenHome(record.CWD, a.Home),
 		})
@@ -96,58 +87,18 @@ func (a *App) collectClaudeAgents(ctx context.Context, inventory *discoveryInven
 }
 
 func (a *App) transcriptMTime(config, sessionID string) time.Time {
+	if sessionID == "" || strings.ContainsAny(sessionID, `/\*?[]`) {
+		return time.Time{}
+	}
+	var newest time.Time
 	matches, _ := a.FS.Glob(filepath.Join(config, "projects", "*", sessionID+".jsonl"))
 	for _, match := range matches {
 		info, err := a.FS.Stat(match)
-		if err == nil && !info.IsDir() {
-			return info.ModTime()
+		if err == nil && !info.IsDir() && info.ModTime().After(newest) {
+			newest = info.ModTime()
 		}
 	}
-	return time.Time{}
-}
-
-// passiveSessions elects the topmost matching process on each pane's tty and
-// maps every matching process in that session to its elected leader.
-func passiveSessions(inventory *discoveryInventory, matches func(process) bool) (leaders map[string]process, owners map[int]int) {
-	leaders = make(map[string]process)
-	owners = make(map[int]int)
-	matched := make(map[int]process)
-	for pid, process := range inventory.processes {
-		if matches(process) {
-			matched[pid] = process
-		}
-	}
-
-	roots := make(map[int]process)
-	for pid, process := range matched {
-		if _, ok := inventory.panes[process.tty]; !ok {
-			continue
-		}
-		root := passiveSessionLeader(process, matched)
-		roots[pid] = root
-		current, ok := leaders[root.tty]
-		if !ok || root.pid < current.pid {
-			leaders[root.tty] = root
-		}
-	}
-	for pid, root := range roots {
-		if leader, ok := leaders[root.tty]; ok && leader.pid == root.pid {
-			owners[pid] = leader.pid
-		}
-	}
-	return leaders, owners
-}
-
-func passiveSessionLeader(start process, matched map[int]process) process {
-	leader := start
-	for depth := 0; depth < len(matched); depth++ {
-		parent, ok := matched[leader.ppid]
-		if !ok || parent.tty != leader.tty {
-			break
-		}
-		leader = parent
-	}
-	return leader
+	return newest
 }
 
 func (a *App) collectCodexAgents(ctx context.Context, inventory *discoveryInventory) []Agent {
@@ -181,8 +132,11 @@ func (a *App) collectCodexAgents(ctx context.Context, inventory *discoveryInvent
 	agents := make([]Agent, 0, len(ttys))
 	for _, tty := range ttys {
 		process, pane := leaders[tty], inventory.panes[tty]
+		if !a.interactiveProcess(process, "codex") {
+			continue
+		}
 		agents = append(agents, Agent{
-			Provider: "codex", Pane: pane.ID, PID: process.pid,
+			Provider: "codex", Pane: pane.ID, PID: process.pid, Identity: process.identity(),
 			Activity: activity[process.pid],
 			Location: pane.Location, Path: shortenHome(pane.Path, a.Home),
 		})
@@ -240,27 +194,46 @@ func (a *App) openFileMTimes(ctx context.Context, owners map[int]int, accept fun
 // usually a link such as ~/.local/bin/agent, and the bundled executable is a
 // plain "node".
 func (a *App) collectCursorAgents(ctx context.Context, inventory *discoveryInventory) []Agent {
-	processName := a.option(ctx, "@cursor_agent_process_name", "cursor-agent")
-	installed, lookupErr := a.Runner.LookPath(processName)
+	processName := a.option(ctx, "@cursor_agent_process_name", "")
+	automatic := processName == ""
+	names := []string{processName}
+	if processName == "" {
+		names = []string{"cursor-agent", "agent"}
+	}
+	var installs []*cursorInstall
+	for _, name := range names {
+		installed, err := a.Runner.LookPath(name)
+		if err != nil {
+			continue
+		}
+		if resolved, err := a.FS.EvalSymlinks(installed); err == nil {
+			installed = resolved
+		}
+		root := cursorInstallRoot(installed)
+		if automatic && name == "agent" && root == "" {
+			continue // Do not mistake an unrelated agent executable for Cursor.
+		}
+		installs = append(installs, &cursorInstall{
+			fs:     a.FS,
+			binary: installed,
+			root:   root,
+			launchers: map[string]bool{
+				"agent": true, "cursor-agent": true, filepath.Base(name): true,
+			},
+			resolved: make(map[string]bool),
+		})
+	}
 	inventory.wg.Wait()
-	if lookupErr != nil {
+	if len(installs) == 0 {
 		return nil
 	}
-	if resolved, err := a.FS.EvalSymlinks(installed); err == nil {
-		installed = resolved
-	}
-
-	cursor := &cursorInstall{
-		fs:     a.FS,
-		binary: installed,
-		root:   cursorInstallRoot(installed),
-		launchers: map[string]bool{
-			"agent": true, "cursor-agent": true, filepath.Base(processName): true,
-		},
-		resolved: make(map[string]bool),
-	}
 	leaders, owners := passiveSessions(inventory, func(process process) bool {
-		return cursor.matches(process.command)
+		for _, cursor := range installs {
+			if cursor.matches(process.command) {
+				return true
+			}
+		}
+		return false
 	})
 	ttys := make([]string, 0, len(leaders))
 	for tty := range leaders {
@@ -270,14 +243,17 @@ func (a *App) collectCursorAgents(ctx context.Context, inventory *discoveryInven
 	chatDir := filepath.Clean(cursorChatsDir(a.Home)) + string(filepath.Separator)
 	activity := a.openFileMTimes(ctx, owners, func(path string) bool {
 		return strings.HasPrefix(path, chatDir) &&
-			strings.HasPrefix(filepath.Base(path), "store.db")
+			(filepath.Base(path) == "store.db" || filepath.Base(path) == "store.db-wal")
 	})
 
 	agents := make([]Agent, 0, len(ttys))
 	for _, tty := range ttys {
 		process, pane := leaders[tty], inventory.panes[tty]
+		if !a.interactiveProcess(process, "cursor") {
+			continue
+		}
 		agents = append(agents, Agent{
-			Provider: "cursor", Pane: pane.ID, PID: process.pid,
+			Provider: "cursor", Pane: pane.ID, PID: process.pid, Identity: process.identity(),
 			Activity: activity[process.pid],
 			Location: pane.Location, Path: shortenHome(pane.Path, a.Home),
 		})
@@ -306,7 +282,7 @@ type cursorInstall struct {
 
 func (c *cursorInstall) matches(command string) bool {
 	if c.root != "" && strings.HasPrefix(command, c.root) {
-		return true
+		return c.launchers[filepath.Base(command)] || filepath.Base(command) == "node"
 	}
 	if !c.launchers[filepath.Base(command)] {
 		return false
@@ -346,24 +322,4 @@ func (a *App) panes(ctx context.Context) map[string]pane {
 		panes[tty] = pane{ID: fields[1], Location: fields[3], Path: fields[4]}
 	}
 	return panes
-}
-
-func (a *App) processInventory(ctx context.Context) map[int]process {
-	out, err := a.run(ctx, "ps", "-Ao", "pid=,ppid=,tty=,comm=")
-	if err != nil {
-		return nil
-	}
-	processes := make(map[int]process)
-	for _, line := range strings.Split(out, "\n") {
-		fields := strings.Fields(line)
-		if len(fields) < 4 {
-			continue
-		}
-		pid, err1 := strconv.Atoi(fields[0])
-		ppid, err2 := strconv.Atoi(fields[1])
-		if err1 == nil && err2 == nil {
-			processes[pid] = process{pid: pid, ppid: ppid, tty: fields[2], command: strings.Join(fields[3:], " ")}
-		}
-	}
-	return processes
 }

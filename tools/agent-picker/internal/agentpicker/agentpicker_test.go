@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -18,6 +19,8 @@ type fakeRunner struct {
 	mu        sync.Mutex
 	available map[string]bool
 	paths     map[string]string
+	argv      map[int][]string
+	argErrors map[int]error
 	handle    func(Command) (string, error)
 	handleCtx func(context.Context, Command) (string, error)
 	commands  []Command
@@ -46,10 +49,18 @@ func (r *fakeRunner) Run(ctx context.Context, command Command) (string, error) {
 	handle, handleCtx := r.handle, r.handleCtx
 	r.mu.Unlock()
 	if handleCtx != nil {
-		return handleCtx(ctx, command)
+		out, err := handleCtx(ctx, command)
+		if command.Name == "ps" {
+			out = processFixture(out)
+		}
+		return out, err
 	}
 	if handle != nil {
-		return handle(command)
+		out, err := handle(command)
+		if command.Name == "ps" {
+			out = processFixture(out)
+		}
+		return out, err
 	}
 	return "", nil
 }
@@ -68,6 +79,54 @@ func (r *fakeRunner) Lookups() []string {
 
 type fakeClock struct {
 	now time.Time
+}
+
+func (r *fakeRunner) ProcessArgs(pid int) ([]string, error) {
+	if err := r.argErrors[pid]; err != nil {
+		return nil, err
+	}
+	if args, ok := r.argv[pid]; ok {
+		return args, nil
+	}
+	return []string{"agent"}, nil
+}
+
+func (r *fakeRunner) Terminate(pid int) error {
+	_, err := r.Run(context.Background(), Command{Name: "kill", Args: []string{"-TERM", strconv.Itoa(pid)}})
+	return err
+}
+
+// Existing discovery fixtures use pid/ppid/tty/command for readability. Supply
+// stable starts and job-control metadata; independent roots on the same tty are
+// background jobs, while descendants inherit their root's process group.
+func processFixture(out string) string {
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	byPID := make(map[string][]string)
+	foreground := make(map[string]string)
+	for _, line := range lines {
+		f := strings.Fields(line)
+		if len(f) < 4 || len(f) >= 12 {
+			return out
+		}
+		byPID[f[0]] = f
+		if foreground[f[2]] == "" {
+			foreground[f[2]] = f[0]
+		}
+	}
+	var rows []string
+	for _, line := range lines {
+		f := strings.Fields(line)
+		root := f
+		for depth := 0; depth < len(lines); depth++ {
+			parent, ok := byPID[root[1]]
+			if !ok || parent[2] != f[2] {
+				break
+			}
+			root = parent
+		}
+		rows = append(rows, fmt.Sprintf("%s %s %s %s %s S Mon Jan 2 12:00:00 2006 %s", f[0], f[1], root[0], foreground[f[2]], f[2], strings.Join(f[3:], " ")))
+	}
+	return strings.Join(rows, "\n") + "\n"
 }
 
 func (c *fakeClock) Now() time.Time { return c.now }
@@ -105,7 +164,7 @@ func installCursor(t *testing.T, home, launcherName string) (launcher, install s
 func fakeAgentResponse(command Command) (string, bool) {
 	joined := strings.Join(command.Args, " ")
 	switch {
-	case command.Name == "ps" && joined == "-Ao pid=,ppid=,tty=,comm=":
+	case command.Name == "ps" && joined == "-Ao pid=,ppid=,pgid=,tpgid=,tty=,stat=,lstart=,comm=":
 		return "100 1 ttys001 claude\n200 1 ttys002 codex\n" +
 			"300 1 ttys003 /fake/share/cursor-agent/versions/x/node\n", true
 	case command.Name == "tmux" && strings.HasPrefix(joined, "list-panes -a"):
@@ -172,7 +231,7 @@ func TestProvidersAndAggregation(t *testing.T) {
 	runner.handle = func(command Command) (string, error) {
 		joined := command.Name + " " + strings.Join(command.Args, " ")
 		switch {
-		case joined == "ps -Ao pid=,ppid=,tty=,comm=":
+		case joined == "ps -Ao pid=,ppid=,pgid=,tpgid=,tty=,stat=,lstart=,comm=":
 			return "100 1 ttys001 claude\n101 1 ttys002 claude\n" +
 				"200 1 ttys003 /mock/codex\n201 200 ttys003 codex\n206 1 ttys003 codex\n202 1 ttys004 codex\n203 1 ttys004 codex-helper\n" +
 				"300 1 ttys005 " + cursorLauncher + "\n" +
@@ -199,7 +258,7 @@ func TestProvidersAndAggregation(t *testing.T) {
 	app := newTestApp(runner, &fakeClock{now: now}, home)
 	agents := app.Agents(context.Background(), "all")
 	commands := runner.Commands()
-	if got := countCommand(commands, "ps", "-Ao pid=,ppid=,tty=,comm="); got != 1 {
+	if got := countCommand(commands, "ps", "-Ao pid=,ppid=,pgid=,tpgid=,tty=,stat=,lstart=,comm="); got != 1 {
 		t.Fatalf("process inventory ran %d times, want 1:\n%s", got, commandLines(commands))
 	}
 	if got := countCommandPrefix(commands, "tmux", "list-panes -a"); got != 1 {
@@ -306,7 +365,7 @@ func TestCodexBatchesLsofAndKeepsPartialOutput(t *testing.T) {
 	runner.handle = func(command Command) (string, error) {
 		joined := command.Name + " " + strings.Join(command.Args, " ")
 		switch {
-		case joined == "ps -Ao pid=,ppid=,tty=,comm=":
+		case joined == "ps -Ao pid=,ppid=,pgid=,tpgid=,tty=,stat=,lstart=,comm=":
 			return "20 1 ttys002 codex\n10 1 ttys001 codex\n", nil
 		case strings.HasPrefix(joined, "tmux list-panes"):
 			return "/dev/ttys001\t%1\tone\tone:1.1\t/tmp/one\n" +
@@ -350,7 +409,7 @@ func TestCursorIdentifiesSessionLeaders(t *testing.T) {
 	runner.handle = func(command Command) (string, error) {
 		joined := command.Name + " " + strings.Join(command.Args, " ")
 		switch {
-		case joined == "ps -Ao pid=,ppid=,tty=,comm=":
+		case joined == "ps -Ao pid=,ppid=,pgid=,tpgid=,tty=,stat=,lstart=,comm=":
 			return "10 1 ttys001 /usr/local/bin/agent\n" +
 				"400 9 ttys002 " + launcher + "\n" +
 				"401 400 ttys002 " + install + "/node\n" +
@@ -416,7 +475,7 @@ func TestCursorHonorsProcessNameOption(t *testing.T) {
 		switch {
 		case joined == "tmux show-option -gqv @cursor_agent_process_name":
 			return launcher, nil
-		case joined == "ps -Ao pid=,ppid=,tty=,comm=":
+		case joined == "ps -Ao pid=,ppid=,pgid=,tpgid=,tty=,stat=,lstart=,comm=":
 			return "800 1 ttys001 " + launcher + "\n", nil
 		case strings.HasPrefix(joined, "tmux list-panes"):
 			return "/dev/ttys001\t%1\trenamed\trenamed:1.1\t/tmp/renamed\n", nil
@@ -448,7 +507,7 @@ func TestCursorIgnoresUnrelatedProcessesNamedAgent(t *testing.T) {
 	runner.handle = func(command Command) (string, error) {
 		joined := command.Name + " " + strings.Join(command.Args, " ")
 		switch {
-		case joined == "ps -Ao pid=,ppid=,tty=,comm=":
+		case joined == "ps -Ao pid=,ppid=,pgid=,tpgid=,tty=,stat=,lstart=,comm=":
 			return "900 1 ttys001 " + stray + "\n901 1 ttys002 /missing/bin/agent\n" +
 				"902 1 ttys003 /tmp/cursor-agent/versions/old/node\n", nil
 		case strings.HasPrefix(joined, "tmux list-panes"):
@@ -472,6 +531,9 @@ func assertAgent(t *testing.T, agents []Agent, want Agent) {
 				t.Fatalf("activity mismatch: got %v, want %v", got.Activity, want.Activity)
 			}
 			got.Activity = want.Activity
+			if want.Identity == "" {
+				got.Identity = ""
+			}
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("agent mismatch\n got: %#v\nwant: %#v", got, want)
 			}
@@ -623,7 +685,7 @@ func TestCLICommandsAndProviders(t *testing.T) {
 						wantCodex := provider == "all" || provider == "codex"
 						wantCursor := provider == "all" || provider == "cursor"
 						if strings.Contains(calls, "claude agents --json") ||
-							!strings.Contains(calls, "ps -Ao pid=,ppid=,tty=,comm=") ||
+							!strings.Contains(calls, "ps -Ao pid=,ppid=,pgid=,tpgid=,tty=,stat=,lstart=,comm=") ||
 							strings.Contains(calls, "@codex_agent_process_name") != wantCodex ||
 							strings.Contains(calls, "@cursor_agent_process_name") != wantCursor {
 							t.Fatalf("list was not dispatched with provider %q:\n%s", provider, calls)
@@ -738,7 +800,7 @@ func TestSelectionNavigationAndCancellation(t *testing.T) {
 				joined := strings.Join(command.Args, " ")
 				switch {
 				case command.Name == "fzf":
-					if !strings.Contains(joined, "kill {2}") || !strings.Contains(joined, "list -provider") {
+					if !strings.Contains(joined, "terminate -provider {3} -pane {1} -pid {2} -identity {8}") || !strings.Contains(joined, "list -provider") {
 						t.Fatalf("termination/reload binding missing: %s", joined)
 					}
 					return tt.selected, nil
@@ -872,7 +934,7 @@ func TestSelectionReceivesAlignedTSVRows(t *testing.T) {
 			return "/dev/ttys001\t%5\twork\twork:1.1\t/tmp/x\n" +
 				"/dev/ttys002\t%6\tcodex-long\tcodex-long:1.1\t/tmp/a much longer path\n", nil
 		case command.Name == "fzf":
-			if !strings.Contains(joined, "kill {2}") {
+			if !strings.Contains(joined, "terminate -provider {3} -pane {1} -pid {2} -identity {8}") {
 				t.Fatalf("kill binding no longer targets the PID field: %s", joined)
 			}
 			input, err := io.ReadAll(command.Input)
@@ -886,7 +948,7 @@ func TestSelectionReceivesAlignedTSVRows(t *testing.T) {
 			}
 			for i, line := range lines {
 				fields := strings.Split(line, "\t")
-				if len(fields) != 7 {
+				if len(fields) != 8 {
 					t.Fatalf("fzf row %d has %d TSV fields: %q", i, len(fields), line)
 				}
 				wantPane, wantPID := []string{"%5", "%6"}[i], []string{"200", "201"}[i]
