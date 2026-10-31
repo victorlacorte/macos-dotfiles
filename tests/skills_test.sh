@@ -384,4 +384,95 @@ expect_file "$project_phys/.agents/skills/alpha/agents/openai.yaml" "overlay-a"
 expect_file "$project_phys/.agents/skills/alpha/.skills-overlay" "agents/openai.yaml"
 [ ! -e "$alpha_dir/SKILL.md" ] || fail_test "q: installed into home shared dir"
 
+printf 'r. catalog installs and updates preserve linked local skills\n'
+reset_overlays
+reset_home
+authored=$tmpdir/authored-skill
+mkdir -p "$authored" "$HOME/.agents/skills/local-files"
+printf '%s\n' 'locally authored' > "$authored/SKILL.md"
+ln -s "$authored" "$HOME/.agents/skills/local-dir"
+ln -s "$authored/SKILL.md" "$HOME/.agents/skills/local-files/SKILL.md"
+expect_status 0 "$skills" install --all
+expect_status 0 "$skills" update --all --dry-run
+expect_status 0 "$skills" update --all
+expect_file "$alpha_dir/SKILL.md" "updated"
+expect_file "$beta_dir/SKILL.md" "updated"
+expect_file "$authored/SKILL.md" 'locally authored'
+[ -L "$HOME/.agents/skills/local-dir" ] || fail_test 'r: local directory link replaced'
+[ -L "$HOME/.agents/skills/local-files/SKILL.md" ] || fail_test 'r: local file link replaced'
+grep -q 'local-dir\|local-files' "$GH_LOG" && fail_test 'r: local skills passed to gh'
+
+printf 's. folded skills and agents directory links are refused before gh\n'
+reset_overlays
+linked_package=$tmpdir/linked-package
+mkdir -p "$linked_package/skills"
+printf '%s\n' untouched > "$linked_package/skills/keep"
+for level in skills agents; do
+  reset_home
+  if [ "$level" = skills ]; then
+    rmdir "$HOME/.agents/skills"
+    ln -s "$linked_package/skills" "$HOME/.agents/skills"
+  else
+    rmdir "$HOME/.agents/skills" "$HOME/.agents"
+    ln -s "$linked_package" "$HOME/.agents"
+  fi
+  for operation in 'install --all' 'update --all' 'update --all --dry-run'; do
+    got=0
+    # shellcheck disable=SC2086 # Split these fixed test arguments.
+    "$skills" $operation >"$out" 2>"$err" || got=$?
+    [ "$got" -eq 2 ] || fail_test "s: $level/$operation expected exit 2, got $got"
+    grep -q 'make stow-agents' "$err" || fail_test 's: missing migration command'
+    [ ! -s "$GH_LOG" ] || fail_test 's: gh invoked through a shared directory link'
+    expect_file "$linked_package/skills/keep" untouched
+    [ ! -e "$linked_package/skills/alpha" ] || fail_test 's: installed into Stow package'
+  done
+done
+
+printf 't. project scope refuses a folded agents link\n'
+reset_home
+rm -rf "$project_phys/.agents"
+ln -s "$linked_package" "$project_phys/.agents"
+(
+  CDPATH='' cd -- "$project_phys/sub" || exit 1
+  expect_status 2 "$skills" install alpha --scope project >"$out" 2>"$err"
+)
+grep -q 'use real .agents and .agents/skills directories' "$err" \
+  || fail_test 't: missing project layout guidance'
+[ ! -s "$GH_LOG" ] || fail_test 't: gh invoked through a project directory link'
+
+printf 'u. make stow-agents unfolds directory links and coexists with catalog skills\n'
+if command -v stow >/dev/null 2>&1; then
+  for level in skills agents; do
+    stow_home=$tmpdir/stow-home-$level
+    mkdir -p "$stow_home"
+    if [ "$level" = skills ]; then
+      mkdir -p "$stow_home/.agents"
+    fi
+    stow --dir="$repo_root" --target="$stow_home" agents
+    if [ "$level" = skills ]; then
+      [ -L "$stow_home/.agents/skills" ] || fail_test 'u: fixture skills directory not folded'
+    else
+      [ -L "$stow_home/.agents" ] || fail_test 'u: fixture agents directory not folded'
+    fi
+    expect_status 0 make -s -C "$repo_root" stow-agents HOME="$stow_home"
+    [ ! -L "$stow_home/.agents" ] || fail_test 'u: agents directory still folded'
+    [ ! -L "$stow_home/.agents/skills" ] || fail_test 'u: skills directory still folded'
+    local_skill=$stow_home/.agents/skills/orchestrate/SKILL.md
+    [ -L "$local_skill" ] || fail_test 'u: authored skill is not linked'
+    : > "$GH_LOG"
+    expect_status 0 env HOME="$stow_home" "$skills" install --all
+    expect_status 0 env HOME="$stow_home" "$skills" update --all
+    expect_file "$stow_home/.agents/skills/alpha/SKILL.md" updated
+    expect_file "$stow_home/.agents/skills/beta/SKILL.md" updated
+    [ -L "$local_skill" ] || fail_test 'u: catalog operation replaced local link'
+    cmp "$local_skill" "$repo_root/agents/.agents/skills/orchestrate/SKILL.md" \
+      || fail_test 'u: authored skill changed'
+    # Restowing must also preserve catalog skills that are already installed.
+    expect_status 0 make -s -C "$repo_root" stow-agents HOME="$stow_home"
+    expect_file "$stow_home/.agents/skills/alpha/SKILL.md" updated
+  done
+else
+  printf 'SKIP: Stow migration integration test (stow is not installed)\n'
+fi
+
 printf 'ok\n'

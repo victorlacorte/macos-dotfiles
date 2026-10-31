@@ -77,7 +77,7 @@ The `agents/.codex/general.config.toml` profile remains available for explicit
 `--profile general` use. Stow it to create `~/.codex/general.config.toml`:
 
 ```sh
-stow --target="$HOME" agents
+make stow-agents
 ```
 
 The profile retains its model, reasoning, sandbox, and project trust settings.
@@ -233,10 +233,11 @@ XDG_CONFIG_HOME=./nvim-0.11/ nvim nvim-0.11/nvim/init.lua
 
 Install `jq` and GitHub CLI with its `gh skill` commands. Put
 `$HOME/.local/bin` on `PATH`, as for the other local tools in this repository.
-From the repository root, install the wrapper and its catalog with:
+From the repository root, link locally authored skills and install the wrapper
+and its catalog with:
 
 ```sh
-make install-skills
+make stow-agents install-skills
 ```
 
 `skills/catalog.json` is the editable source recipe. `make install-skills`
@@ -256,6 +257,19 @@ skills install unslop --scope project
 a new authored skill to the allowlist. Upstream skills come only from
 `skills/catalog.json`.
 
+`make stow-agents` runs `stow --restow --no-folding --target="$HOME" agents`.
+It also migrates an existing Stow directory link into real directories with
+symlinks to the locally authored files. This keeps edits to authored skills
+in the checkout while downloaded skills live outside it. Both kinds coexist:
+
+```text
+~/.agents/skills/                      real directory
+  orchestrate/SKILL.md -> <checkout>/agents/.agents/skills/orchestrate/SKILL.md
+  babysit/SKILL.md     -> <checkout>/agents/.agents/skills/babysit/SKILL.md
+  unslop/                             downloaded catalog skill
+  code-review/                        downloaded catalog skill
+```
+
 Installs go to `~/.agents/skills`, or the Git root's `.agents/skills` with
 `--scope project`. Codex and Cursor both read that directory, so one copy
 serves both. Every skill there is visible to both harnesses; to keep a skill
@@ -264,7 +278,9 @@ out of automatic use, Cursor honors `disable-model-invocation: true` in
 `agents/openai.yaml` (add the latter through an overlay). User installs
 target the home directory. Project installs target the Git root's
 `.agents/skills`, even when you run the command from a subdirectory.
-Installs reject a directory symlink at that destination. `--all` means the
+Installs and updates require real `.agents` and `.agents/skills` directories.
+Links for locally authored skills are allowed alongside catalog installs;
+a link occupying a selected catalog name is refused. `--all` means the
 six names in the local catalog, not every skill in their upstream
 repositories.
 
@@ -273,6 +289,21 @@ ones. `skills update` refreshes installed ones (skipping, with a notice,
 catalog skills that aren't installed for `--all`) and re-applies overlays.
 Removing an overlay directory and running `skills update NAME` removes its
 files.
+
+Neither command edits `skills/catalog.json`. `make install-skills` refreshes
+the installed catalog and wrapper; it does not download skills. After editing
+the catalog, run it again before using the installed `skills` command.
+To add new catalog entries and refresh existing installs, use:
+
+```sh
+make install-skills
+skills install --all
+skills update --all
+```
+
+Updates use the GitHub source metadata recorded at installation. Changing an
+existing catalog entry's repository or selector does not redirect an installed
+skill's update source; reinstall that skill to switch sources.
 
 `skills/overlays/<name>/` holds files added on top of an installed upstream
 skill when upstream does not ship them, such as `unslop`'s
@@ -299,15 +330,18 @@ upstream changes. `gh skill list` shows the skills GitHub CLI finds in its
 known locations.
 
 Earlier checkouts linked upstream skills into `~/.agents/skills` through
-Stow. After those skills were removed from the package, the leftover
-symlinks dangle, and the wrapper refuses to install over a symlinked skill
+Stow. If `.agents` or `.agents/skills` is itself a directory symlink, first
+run `make stow-agents` from this checkout. After upstream skills were removed
+from the package, the leftover symlinks dangle, and the wrapper refuses to
+install over a symlinked skill
 directory. Remove the dangling links, then reinstall. The `orchestrate`
-link still resolves, so it is left in place. Also remove duplicate copies
-left in `~/.cursor/skills` by earlier Cursor-only installs (Cursor would
+and `babysit` links still resolve, so they are left in place. Also remove
+duplicate copies left in `~/.cursor/skills` by earlier Cursor-only installs (Cursor would
 otherwise see each skill twice), for example by deleting the catalog skill
 directories there.
 
 ```sh
+make stow-agents
 find "$HOME/.agents/skills" -maxdepth 1 -type l ! -exec test -e {} \; -print -delete
 skills install --all
 ```
