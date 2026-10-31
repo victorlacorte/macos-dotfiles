@@ -200,41 +200,40 @@ func (a *App) collectCursorAgents(ctx context.Context, inventory *discoveryInven
 	if processName == "" {
 		names = []string{"cursor-agent", "agent"}
 	}
-	var installed string
-	var lookupErr error
+	var installs []*cursorInstall
 	for _, name := range names {
-		installed, lookupErr = a.Runner.LookPath(name)
-		if lookupErr == nil {
-			resolved := installed
-			if real, err := a.FS.EvalSymlinks(installed); err == nil {
-				resolved = real
-			}
-			if automatic && name == "agent" && cursorInstallRoot(resolved) == "" {
-				return nil // Do not mistake an unrelated agent executable for Cursor.
-			}
-			processName = name
-			break
+		installed, err := a.Runner.LookPath(name)
+		if err != nil {
+			continue
 		}
+		if resolved, err := a.FS.EvalSymlinks(installed); err == nil {
+			installed = resolved
+		}
+		root := cursorInstallRoot(installed)
+		if automatic && name == "agent" && root == "" {
+			continue // Do not mistake an unrelated agent executable for Cursor.
+		}
+		installs = append(installs, &cursorInstall{
+			fs:     a.FS,
+			binary: installed,
+			root:   root,
+			launchers: map[string]bool{
+				"agent": true, "cursor-agent": true, filepath.Base(name): true,
+			},
+			resolved: make(map[string]bool),
+		})
 	}
 	inventory.wg.Wait()
-	if lookupErr != nil {
+	if len(installs) == 0 {
 		return nil
 	}
-	if resolved, err := a.FS.EvalSymlinks(installed); err == nil {
-		installed = resolved
-	}
-
-	cursor := &cursorInstall{
-		fs:     a.FS,
-		binary: installed,
-		root:   cursorInstallRoot(installed),
-		launchers: map[string]bool{
-			"agent": true, "cursor-agent": true, filepath.Base(processName): true,
-		},
-		resolved: make(map[string]bool),
-	}
 	leaders, owners := passiveSessions(inventory, func(process process) bool {
-		return cursor.matches(process.command)
+		for _, cursor := range installs {
+			if cursor.matches(process.command) {
+				return true
+			}
+		}
+		return false
 	})
 	ttys := make([]string, 0, len(leaders))
 	for tty := range leaders {

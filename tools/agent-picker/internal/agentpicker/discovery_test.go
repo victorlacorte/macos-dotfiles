@@ -183,6 +183,47 @@ func TestCursorLauncherDiscovery(t *testing.T) {
 	})
 }
 
+func TestCursorDiscoversBothInstallations(t *testing.T) {
+	for _, configured := range []string{"", "agent", "cursor-agent"} {
+		t.Run("configured="+configured, func(t *testing.T) {
+			home := t.TempDir()
+			legacy, _ := installCursor(t, filepath.Join(home, "legacy"), "cursor-agent")
+			modern, _ := installCursor(t, filepath.Join(home, "modern"), "agent")
+			r := &fakeRunner{
+				paths: map[string]string{"cursor-agent": legacy, "agent": modern},
+				argv:  map[int][]string{100: {legacy}, 200: {modern}},
+				handle: func(c Command) (string, error) {
+					if c.Name == "tmux" {
+						return configured, nil
+					}
+					return "", nil
+				},
+			}
+			second := foregroundProcess(200, 1, modern)
+			second.tty = "ttys002"
+			inv := &discoveryInventory{
+				processes: map[int]process{100: foregroundProcess(100, 1, legacy), 200: second},
+				panes:     map[string]pane{"ttys001": {ID: "%1"}, "ttys002": {ID: "%2"}},
+			}
+			app := newTestApp(r, &fakeClock{}, home)
+			got := app.collectCursorAgents(context.Background(), inv)
+			want := []int{100, 200}
+			if configured == "agent" {
+				want = []int{200}
+			} else if configured == "cursor-agent" {
+				want = []int{100}
+			}
+			var pids []int
+			for _, agent := range got {
+				pids = append(pids, agent.PID)
+			}
+			if !reflect.DeepEqual(pids, want) {
+				t.Fatalf("PIDs=%v want=%v", pids, want)
+			}
+		})
+	}
+}
+
 func TestCollectorsOmitHeadlessAndUnreadableProcesses(t *testing.T) {
 	for _, provider := range []string{"codex", "cursor"} {
 		for _, unreadable := range []bool{false, true} {
