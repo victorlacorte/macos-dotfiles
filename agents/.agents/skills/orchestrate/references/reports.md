@@ -2,7 +2,7 @@
 
 ## Dispatch and handoff
 
-The parent creates the canonical run directory specified in `SKILL.md` and assigns each task and round `<run>/<task>-<round>.md` and `<run>/evidence/<task>-<round>/`. Pass these as absolute paths alongside the working directory. Worktree tasks use the same run directory in the original project, not a new `.scratch` under their worktree. Paths must be writable by the child and readable by the parent; tasks must not share output paths. If artifact access is unavailable, report the blocker rather than dumping the investigation into chat.
+The parent creates the canonical run directory specified in `SKILL.md` and assigns each task and round `<run>/<task>-<round>.md` and `<run>/evidence/<task>-<round>/`. Pass the run directory, assigned report and evidence paths, and working directory as absolute paths in every brief. Worktree tasks use the same run directory in the original project, not a new `.scratch` under their worktree. Paths must be writable by the child and readable by the parent; tasks must not share output paths. If artifact access is unavailable, report the blocker rather than dumping the investigation into chat.
 
 Include these requirements in the child's brief. The child's final chat reply contains only:
 
@@ -10,7 +10,7 @@ Include these requirements in the child's brief. The child's final chat reply co
 - Completion status: `complete`, `partial`, or `blocked`.
 - A summary of at most three bullets, including any blocker.
 
-`complete` means the assigned work was performed and reported. For a check-running task, it does not mean the checks passed. Interruptions and requests for missing information may be communicated before the final handoff.
+`complete` means the assigned work was performed and reported. For a check-running task, it does not mean the checks passed. Before the final handoff, a child may send a brief interruption or blocker question in chat to request missing information or evidence. The parent responds through a follow-up message containing the answer or a reference to an accessible evidence artifact. Record any unresolved blocker in the report.
 
 ## Report contents
 
