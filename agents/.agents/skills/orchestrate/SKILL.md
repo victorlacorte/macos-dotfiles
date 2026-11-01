@@ -28,6 +28,8 @@ Before dispatch, create `<project-root>/.scratch/<YYYYMMDD-HHMM>-<subject-slug>/
 
 Follow the [Markdown report contract](references/reports.md) for required brief fields, shared artifact locations, and final chat replies. Include the contract in every brief; children do not inherit this skill. Keep artifacts available through final review.
 
+Follow the [activity journal contract](references/activity-journal.md) to record assignments, handoffs, reviews, outcomes, artifact links, and measured usage.
+
 Read each report before acceptance; open supporting evidence as needed. Investigation output stays in files until relevant to a parent decision.
 
 ## Parallel work and worktrees
@@ -52,4 +54,4 @@ Children report their base revision, resulting commits or patch, and integration
 
 ## Final report
 
-Report what changed, the number of implementation rounds, verification results and their source (explorer execution or parent artifact review), and unresolved issues. Link the relevant reports and evidence, and state verification limits explicitly.
+Report what changed, implementation rounds per work item, verification results and their source (explorer execution or parent artifact review), and unresolved issues. Link the relevant reports and evidence, and state verification limits explicitly. Include task/run IDs, journal location, known PR links, and measured usage by orchestrator and child when available; identify recording or usage gaps.
