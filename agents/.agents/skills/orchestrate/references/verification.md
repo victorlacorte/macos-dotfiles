@@ -2,7 +2,7 @@
 
 ## Select evidence before implementation
 
-Map each acceptance criterion to a configured command, an explicit behavioral scenario, or parent review of a specific artifact. Record this mapping in a short verification plan under the run directory and provide each child only its assigned part. Follow repository-required checks; identify coverage gaps rather than assuming lint, types, or an existing test suite proves the requested behavior.
+Map each acceptance criterion to a configured command, an explicit behavioral scenario, or parent review of a specific artifact. Record this mapping in a short verification plan at `<run>/verification-plan.md` and provide each child only its assigned part. Follow repository-required checks; identify coverage gaps rather than assuming lint, types, or an existing test suite proves the requested behavior.
 
 For commands, specify exact invocations, working directory, and setup, including state and artifact inspection commands needed for the report. For UI, manual, or external-integration scenarios, specify the target, initial state, steps, expected observations, and evidence to capture, such as screenshots or responses. Use only available tools and authorized actions; missing capabilities or access are blockers. Observations that do not exercise a criterion leave it unverified.
 
