@@ -2,6 +2,9 @@
 	program = gpg
 [commit]
 	gpgsign = true
+[credential "https://github.com"]
+	helper =
+	helper = !gh auth git-credential
 [user]
 	email = 1683634+victorlacorte@users.noreply.github.com
 	name = Victor Lacorte
