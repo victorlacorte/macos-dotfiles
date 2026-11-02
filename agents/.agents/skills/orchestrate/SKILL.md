@@ -24,11 +24,11 @@ Use the configured child models and fresh, self-contained briefs. Assign non-ove
 
 ## Run directory and handoff
 
-Before dispatch, create `<project-root>/.scratch/<YYYYMMDD-HHMM>-<subject-slug>/`, using local time and a lowercase kebab-case subject. Add a numeric suffix if the path belongs to another run. Reuse this directory throughout the orchestration task. Keep artifacts uncommitted and exclude `.scratch` from code searches and source-change review.
+Before dispatch, create `<project-root>/.scratch/<YYYYMMDD-HHMM>-<subject-slug>/`, using local time and a lowercase kebab-case subject. Add a numeric suffix if the path belongs to another run. The directory name is the run ID; reuse the directory throughout the run. Keep artifacts uncommitted: if `git check-ignore -q .scratch/` fails, append `.scratch/` to `$(git rev-parse --git-common-dir)/info/exclude`, which linked worktrees share. Exclude `.scratch` from code searches and source-change review.
 
 Follow the [Markdown report contract](references/reports.md) for required brief fields, shared artifact locations, and final chat replies. Include the contract in every brief; children do not inherit this skill. Keep artifacts available through final review.
 
-Follow the [activity journal contract](references/activity-journal.md) to record assignments, handoffs, reviews, outcomes, artifact links, and measured usage.
+Follow the [activity journal contract](references/activity-journal.md) to record assignments, handoffs, reviews, outcomes, artifact links, and measured usage in the run directory. Only the parent writes the journal.
 
 Read each report before acceptance; open supporting evidence as needed. Investigation output stays in files until relevant to a parent decision.
 
@@ -40,7 +40,7 @@ Record each worktree's absolute path, branch or detached state, and starting rev
 
 A correction round uses a fresh child, which may reuse the existing worktree after the previous writer has stopped. Preserve its changes and give the new child an updated brief describing the current state and required corrections. A fresh child does not require a new worktree.
 
-Children report their base revision, resulting commits or patch, and integration dependencies. Review their changes and delegate integration and conflict resolution to an implementer. Verify the combined result in the integration checkout before acceptance; individual worktree passes do not verify the combined result. Keep worktrees until their changes are integrated or handed off and their evidence reviewed.
+Children report their base revision, resulting commits or patch, and integration dependencies. Review their changes and delegate integration and conflict resolution to an implementer as a separate work item. Verify the combined result in the integration checkout before acceptance; individual worktree passes do not verify the combined result. Keep worktrees until their changes are integrated or handed off and their evidence reviewed.
 
 ## Workflow
 
@@ -48,7 +48,7 @@ Children report their base revision, resulting commits or patch, and integration
 2. Map each criterion to evidence using the [verification procedure](references/verification.md). Delegate applicable baseline checks to a fresh explorer before implementation. Use findings in the implementation brief, linking logs instead of copying them.
 3. Delegate external facts to a researcher, codebase mapping to an explorer, and bounded changes to an implementer. Partition responsibilities and use worktrees where appropriate.
 4. Start every round with a fresh child and clean context. Brief it with the goal, acceptance criteria, owned scope, constraints, relevant findings, prior work to preserve, working state, and the dispatch requirements in the [report contract](references/reports.md). Implementers do not run verification or external research; they request missing evidence. Explorers execute only the assigned commands or behavioral procedures and do not fix failures. Checks may create artifacts, so do not require blanket read-only mode.
-5. Read reports and review diffs and relevant files against the criteria. Completion status is not acceptance or proof of verification. Send concrete corrections to a fresh implementer. Reassess contradicted assumptions and stop on real blockers rather than repeating unchanged attempts.
+5. Read reports and review diffs and relevant files against the criteria. Completion status is not acceptance or proof of verification. Send concrete corrections and answers to child questions to a fresh child; do not resume or message an existing child. Reassess contradicted assumptions and stop on real blockers rather than repeating unchanged attempts.
 6. After integration and the final diff, delegate final verification to a fresh explorer. Review its report and evidence against the verification plan and the final source state. Route necessary fixes through an implementer, then repeat affected verification.
 7. Finish when criteria and required verification are satisfied, or report the remaining blocker and evidence. Pre-existing failures, regressions, skipped checks, and unrun checks must remain distinguishable; none count as a pass.
 

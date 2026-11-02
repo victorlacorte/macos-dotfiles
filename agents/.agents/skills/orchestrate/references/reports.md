@@ -2,7 +2,7 @@
 
 ## Dispatch and handoff
 
-The parent creates the canonical run directory specified in `SKILL.md` and assigns each task and round `<run>/<task>-<round>.md` and `<run>/evidence/<task>-<round>/`. Pass the run directory, assigned report and evidence paths, and working directory as absolute paths in every brief. Worktree tasks use the same run directory in the original project, not a new `.scratch` under their worktree. Paths must be writable by the child and readable by the parent; tasks must not share output paths. If artifact access is unavailable, report the blocker rather than dumping the investigation into chat.
+The parent creates the canonical run directory specified in `SKILL.md`. For each attempt, it sends the brief as the child's prompt, saves the same text to `<run>/briefs/<attempt_id>.md`, and assigns `<run>/reports/<attempt_id>.md` and `<run>/evidence/<attempt_id>/`, using the `attempt_id` from the [activity journal](activity-journal.md). Pass the run directory, assigned report and evidence paths, and working directory as absolute paths in every brief. Worktree tasks use the same run directory in the original project, not a new `.scratch` under their worktree. Paths must be writable by the child and readable by the parent; tasks must not share output paths. If artifact access is unavailable, report the blocker rather than dumping the investigation into chat.
 
 Include these requirements in the child's brief. The child's final chat reply contains only:
 
@@ -10,7 +10,7 @@ Include these requirements in the child's brief. The child's final chat reply co
 - Completion status: `complete`, `partial`, or `blocked`.
 - A summary of at most three bullets, including any blocker.
 
-`complete` means the assigned work was performed and reported. For a check-running task, it does not mean the checks passed. Before the final handoff, a child may send a brief interruption or blocker question in chat to request missing information or evidence. The parent responds through a follow-up message containing the answer or a reference to an accessible evidence artifact. Record any unresolved blocker in the report.
+`complete` means the assigned work was performed and reported. For a check-running task, it does not mean the checks passed. If missing information or evidence prevents the assignment, the child stops, records its questions and any partial results in the report, and reports `blocked`. The parent answers through a new brief to a fresh child, never through a follow-up message.
 
 ## Report contents
 
