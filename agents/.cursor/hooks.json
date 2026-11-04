@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "hooks": {
+    "postToolUse": [
+      {
+        "command": "$HOME/.agents/skills/orchestrate/hooks/cursor-journal.sh",
+        "matcher": "Task"
+      }
+    ],
+    "postToolUseFailure": [
+      {
+        "command": "$HOME/.agents/skills/orchestrate/hooks/cursor-journal.sh",
+        "matcher": "Task"
+      }
+    ]
+  }
+}

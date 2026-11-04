@@ -2,7 +2,19 @@
 
 ## Dispatch and handoff
 
-The parent creates the canonical run directory specified in `SKILL.md`. For each attempt, it sends the brief as the child's prompt, saves the same text to `<run>/briefs/<attempt_id>.md`, and assigns `<run>/reports/<attempt_id>.md` and `<run>/evidence/<attempt_id>/`, using the `attempt_id` from the [activity journal](activity-journal.md). Pass the run directory, assigned report and evidence paths, and working directory as absolute paths in every brief. Worktree tasks use the same run directory in the original project, not a new `.scratch` under their worktree. Paths must be writable by the child and readable by the parent; tasks must not share output paths. If artifact access is unavailable, report the blocker rather than dumping the investigation into chat.
+The parent uses the task directory specified in `SKILL.md`. For each attempt, it sends the brief as the child's prompt, saves the same text to `<task-dir>/briefs/<attempt_id>.md`, and assigns `<task-dir>/reports/<attempt_id>.md` and `<task-dir>/evidence/<attempt_id>/`, using the `attempt_id` from the [activity journal](activity-journal.md). Worktree tasks use the task directory in the original project, not a new `.scratch` under their worktree. Paths must be writable by the child and readable by the parent; attempts must not share output paths. If artifact access is unavailable, report the blocker rather than dumping the investigation into chat.
+
+Start every brief with this header, using absolute paths:
+
+```text
+Orchestrate attempt
+Role: <implementer|researcher|explorer>
+Report: <task-dir>/reports/<attempt_id>.md
+Evidence: <task-dir>/evidence/<attempt_id>/
+Working directory: <path>
+```
+
+Keep these exact labels on their own lines: harness hooks identify the task and attempt from the `Report:` line.
 
 Include these requirements in the child's brief. The child's final chat reply contains only:
 

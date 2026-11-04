@@ -22,13 +22,15 @@ The parent may read instructions, inspect repository state, locate a known file 
 
 Use the configured child models and fresh, self-contained briefs. Assign non-overlapping questions and pass established findings forward. Batch closely related small operations; do not delegate trivial parent bookkeeping or known-file lookups. Delegation reduces parent context exposure, but startup, briefing, child work, and review can increase total tokens. Do not assume subsidy or monetary savings without applicable pricing or usage evidence.
 
-## Run directory and handoff
+## Task directory and handoff
 
-Before dispatch, create `<project-root>/.scratch/<YYYYMMDD-HHMM>-<subject-slug>/`, using local time and a lowercase kebab-case subject. Add a numeric suffix if the path belongs to another run. The directory name is the run ID; reuse the directory throughout the run. Keep artifacts uncommitted: if `git check-ignore -q .scratch/` fails, append `.scratch/` to `$(git rev-parse --git-common-dir)/info/exclude`, which linked worktrees share. Exclude `.scratch` from code searches and source-change review.
+A task is the user-agreed outcome and its acceptance criteria. Each task has one directory, `<project-root>/.scratch/<YYYYMMDD>-<task-slug>/`, using the local creation date and a lowercase kebab-case subject. Add a numeric suffix if the path belongs to another task. The directory name is the task ID. Every session working on the task reuses its directory; worktree tasks use the original project's directory. Keep artifacts uncommitted: if `git check-ignore -q .scratch/` fails, append `.scratch/` to `$(git rev-parse --git-common-dir)/info/exclude`, which linked worktrees share. Exclude `.scratch` from code searches and source-change review.
+
+To continue a task, use the directory the user names or find it by listing `.scratch/`. Resume from its journal as described in the [activity journal contract](references/activity-journal.md), then the reports and briefs it points to. If the requested outcome has changed into a different one, start a new task instead. Do not run two sessions on the same task at once.
 
 Follow the [Markdown report contract](references/reports.md) for required brief fields, shared artifact locations, and final chat replies. Include the contract in every brief; children do not inherit this skill. Keep artifacts available through final review.
 
-Follow the [activity journal contract](references/activity-journal.md) to record assignments, handoffs, reviews, outcomes, artifact links, and measured usage in the run directory. Only the parent writes the journal.
+Follow the [activity journal contract](references/activity-journal.md) to record the task, sessions, reviews, and artifacts. The journal is both the handoff to later sessions and telemetry for improving this skill.
 
 Read each report before acceptance; open supporting evidence as needed. Investigation output stays in files until relevant to a parent decision.
 
@@ -54,4 +56,4 @@ Children report their base revision, resulting commits or patch, and integration
 
 ## Final report
 
-Report what changed, implementation rounds per work item, verification results and their source (explorer execution or parent artifact review), and unresolved issues. Link the relevant reports and evidence, and state verification limits explicitly. Include task/run IDs, journal location, known PR links, and measured usage by orchestrator and child when available; identify recording or usage gaps.
+Report what changed, implementation rounds per work item, verification results and their source (explorer execution or parent artifact review), and unresolved issues. Link the relevant reports and evidence, and state verification limits explicitly. Include the task ID and directory and known PR links, and identify journal recording gaps.
