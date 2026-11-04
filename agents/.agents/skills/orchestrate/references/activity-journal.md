@@ -1,65 +1,81 @@
 # Activity journal
 
-Record orchestration history for fresh-child handoffs and metrics. Only the parent writes the journal. Children return Markdown reports, and the parent records their results.
+The journal is the task's handoff state for later sessions and telemetry for improving this skill: delegation outcomes, correction causes, and durations. Children neither read nor write it.
 
 ## Identity and storage
 
-- Reuse `task_id` across conversations and runs for the user-agreed outcome and acceptance criteria. PRs are linked artifacts, not task identities. To continue a task, use the run the user names or search prior `.scratch/*/journal.jsonl` files for its `task_id`.
-- `run_id` is the run directory name from `SKILL.md`. Each run belongs to one task. Continue an existing run only when its recorded history establishes continuity; otherwise start a new run.
+- `task_id` is the task directory name from `SKILL.md`. A task that grew out of another records the earlier `task_id` in `task.started` as `derived_from`.
+- A session is one parent conversation working on the task, from `session.started` to `session.finished`. Events belong to the most recent preceding `session.started`. If the user continues a conversation after its `session.finished`, append a new `session.started` before further work, so each session has one outcome.
 - Keep `work_item_id` stable for a bounded assignment goal, such as one change, baseline checks, or final verification. Integration and conflict resolution form their own work item.
-- Give each fresh child dispatch an `attempt_id` of `<work_item_id>-<n>`, numbered from 1 within its work item. It names the attempt's brief, report, and evidence paths in the [report contract](reports.md).
+- Give each fresh child dispatch an `attempt_id` of `<work_item_id>-<n>`, numbered from 1 within its work item across all sessions of the task. Take the next unused number from `<task-dir>/briefs/`. The attempt ID names its brief, report, and evidence paths in the [report contract](reports.md).
 
-Write `<run-dir>/journal.jsonl`. Append one JSON object per line and never rewrite prior records; corrections are new events that reference the original in `caused_by`. File order is event order. Report malformed records and failed writes as gaps without blocking unrelated work. Do not commit or publish journal data unless requested.
+Write `<task-dir>/journal.jsonl`. Append one JSON object per line with a single write, and never rewrite prior records. File order is event order. To correct an event, append a replacement of the same type whose `supersedes` names the original. Report failed writes as gaps without blocking unrelated work. Do not commit or publish journal data unless requested.
+
+## Writers
+
+Two writers share the file:
+
+- **Harness hook:** records `attempt.finished` from harness data when the active adapter provides a hook. It recognizes attempts by the brief header from the report contract and ignores other children. Without a hook these events are missing; the parent does not emulate them.
+- **Parent:** records task, session, review, and artifact events: judgments and context that only the parent has. Hook events are telemetry; do not infer task state from them.
+
+The parent appends only through [`scripts/journal-append`](../scripts/journal-append), passing the event's `data` object on stdin:
+
+```sh
+~/.agents/skills/orchestrate/scripts/journal-append "<task-dir>" attempt.reviewed --attempt implement-1 <<'EOF'
+{"child_status": "complete", "decision": "accepted", "reason": null, "rationale": "...", "correction": null}
+EOF
+```
+
+The script fills the envelope and the measurable `session.started` fields, appends one line, and prints the new `event_id`. Pass `--attempt <attempt_id>` for attempt events and `--supersedes <event_id>` for corrections. It rejects missing or unknown keys, invalid values, and events outside an open session, and writes nothing then; fix the reported problem and retry.
 
 ## Events
 
-Every event uses this envelope:
+Every event uses this envelope, which the writer fills:
 
 | Field | Value |
 | --- | --- |
-| `schema_version` | `2` |
-| `event_id` | Unique within the run |
+| `schema_version` | `3` |
+| `event_id` | Unique within the task |
 | `occurred_at` | UTC RFC 3339 timestamp |
 | `type` | Event name below |
-| `task_id`, `run_id` | Task and run IDs |
-| `work_item_id`, `attempt_id` | Assignment IDs; null for task/run events |
-| `caused_by` | Prior event IDs; empty when none |
+| `writer` | `parent` or `hook` |
+| `task_id` | Task ID |
+| `work_item_id`, `attempt_id` | Assignment IDs; null for task and session events |
+| `supersedes` | Event ID this record replaces, or null |
 | `data` | Event-specific fields below |
 
-Record unknown metadata as null.
+Record unknown metadata as null. The parent supplies exactly the `data` keys below; lists are arrays of strings.
 
-| Event | Data |
-| --- | --- |
-| `task.started` | Title, outcome, acceptance criteria; once per task |
-| `run.started` | Harness, model/effort, native session ID, skill revision, repository ID (canonical remote, or a stable local identity), working directory, branch, starting commit, existing changes, local UTC offset |
-| `attempt.dispatched` | Role, model/effort, brief path, working directory or worktree path, starting revision, report and evidence paths |
-| `attempt.finished` | Status, source (`child_reply` or `harness_status`), native child ID if available, report path, changed files, blockers |
-| `attempt.reviewed` | Decision (`accepted`, `correction_required`, `blocked`), `reason` unless accepted, rationale, evidence links, correction instructions or answers |
-| `artifact.linked` | Kind, relationship to task, stable locator such as PR URL, commit hash, issue URL, or report path |
-| `run.finished` | Outcome (`completed`, `blocked`, `interrupted`), delivered work, criteria met/unmet, baseline/final check evidence, remaining work, journal/usage gaps |
-| `task.completed` / `task.blocked` | Accepted outcome or blocker, evidence, artifact references |
+| Event | Writer | Data |
+| --- | --- | --- |
+| `task.started` | Parent | `title`, `outcome`, `acceptance_criteria` (list), `derived_from` (earlier `task_id` or null); once per task |
+| `task.criteria_changed` | Parent | `acceptance_criteria` (full current list), `prompted_by` |
+| `session.started` | Parent | `model`, `effort` (null when the model ID encodes it). The script adds `harness`, `conversation_id` (native conversation or thread ID), `skill_revision` (`commit`, `dirty`), `repository` (origin remote, or the Git common directory), `working_directory`, `branch`, `starting_commit`, `existing_changes` (porcelain status lines outside `.scratch`), `utc_offset` |
+| `attempt.finished` | Hook | `role`, `native_child_id`, `child_type`, `requested_model`, `harness_status`, `error_message`, `background`, `started_at` and `duration_ms` (null for background children), `parent_conversation_id`, `child_transcript_path`, `harness_version` |
+| `attempt.reviewed` | Parent | `child_status` (`complete`, `partial`, `blocked`, or `missing` when no reply arrived), `decision` (`accepted`, `correction_required`, `blocked`), `reason` (null exactly when accepted), `rationale`, `correction` (correction instructions or answers to child questions, or null) |
+| `artifact.linked` | Parent | `kind`, `relationship` to the task, `locator` (stable: PR URL, commit hash, issue URL, or report path); `--attempt` optional |
+| `session.finished` | Parent | `outcome` (`completed`, `blocked`, `interrupted`), `criteria_met`, `criteria_unmet`, `open_work_items`, `next_steps`, `journal_gaps` (all lists) |
+| `task.completed` | Parent | `outcome` (accepted outcome), `artifacts` (list of locators) |
+| `task.blocked` | Parent | `blocker`, `artifacts` (list of locators) |
 
-A completed run need not complete its task. Link PRs only from known evidence, not branch-name inference.
+Each `task.criteria_changed` records a new state, not a correction: do not set `supersedes` on it unless it fixes a mistaken record.
 
-The `attempt.finished` status is the child's reported `complete`, `partial`, or `blocked`. Use `failed` or `interrupted` when the harness reports that the child did not finish, and `missing` when no result arrived; none of these is success. The report remains the source of findings and evidence; the event records only what metrics and later briefs need to locate.
+Record `attempt.reviewed` after reviewing each attempt, including attempts that ended with a question or without a reply. Record corrections and answers in full, so a later session can build the next brief from them. A completed session need not complete its task. Link PRs only from known evidence, not branch-name inference.
 
 Review `reason` values: `missing_context`, `unclear_scope`, `implementation_defect`, `missing_research`, `environment_issue`, `changed_requirement`, or `unknown`. A child question is reviewed as `correction_required` with the reason that explains why the brief was insufficient. Use `blocked` only when the work item cannot continue without something outside the parent's control, such as user input or access.
 
-## Handoffs
+## Continuing a task
 
-Write the brief to its path and record `attempt.dispatched` before spawning; link it through `caused_by` to the review that prompted it, if any. Children do not read or write the journal, so keep briefs self-contained. For a correction or answered question, build the next brief from the previous brief, the prior report, and the review: describe the current working state, the partial results to keep, and the corrections or answers. History supplies context, not assignments or user approval.
+At the start of a session on an existing task, read the parent events that are still current:
 
-When the child returns, record `attempt.finished` from its reply and report, then `attempt.reviewed` after review.
+```sh
+jq -Rnc '[inputs | (fromjson? // {malformed: .}) | select(.malformed or .writer == "parent")]
+  | (map(.supersedes // empty)) as $s
+  | .[] | select((.event_id // "") as $id | $s | index($id) | not)' "<task-dir>/journal.jsonl"
+```
 
-## Metrics and usage
+The current criteria are in `task.started` and the latest `task.criteria_changed`. Each work item's state is its latest `attempt.reviewed`, and the last `session.finished` lists open work and next steps. A session without `session.finished` was interrupted: compare its last reviews with the briefs and reports on disk. Report malformed lines as gaps. History supplies context, not assignments or user approval.
 
-Count each implementer attempt as one implementation round for its work item, including attempts that ended with a question; identify attempts without a result. Count research, explorer, and integration attempts separately. Label sums across work items as total implementation attempts. Derive correction counts, first-attempt acceptance, and the distribution of review reasons from `attempt.reviewed`. Attempt duration is the interval from `attempt.dispatched` to `attempt.finished`.
+## Metrics
 
-When a runtime source exposes token usage, the parent records `usage.recorded` with:
-
-- Subject (orchestrator or attempt) and native session/thread/turn IDs.
-- Source record ID or locator, measurement interval, and incremental/cumulative counter semantics.
-- Input, cached input, output, reasoning, and total tokens as exposed; unsupported counters are null.
-- Whether coverage is partial/complete and includes children.
-
-Use only measured runtime evidence, never estimates or unsupported child claims. Preserve the source's counter semantics: do not sum cumulative snapshots, count token subsets twice, or add children already included in parent totals. Leave ambiguous usage unattributed; cross-task usage requires runtime boundaries. When no source exposes usage, record that once as a gap in `run.finished`. Final usage may be appended after `run.finished`.
+These derivations are for later analysis, not for the parent during a session. Each attempt counts as one round for its work item; implementer attempts are implementation rounds, and research, explorer, and integration attempts count separately. Attempt `n > 1` within a work item follows the review of attempt `n - 1`. Derive correction counts, first-attempt acceptance, and review-reason distribution from `attempt.reviewed`, and durations from `attempt.finished`. Child transcripts supply tool-call counts. The model a child actually ran, which can differ from the requested model, comes from harness session logs where they record it; otherwise only the parent's report of client overrides shows it. Token usage is not journaled: analysis derives it from harness session logs, joined through the native IDs in `session.started` and `attempt.finished` or the logs' own parent links, and treats harnesses without such logs as usage gaps.

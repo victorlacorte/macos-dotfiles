@@ -6,6 +6,7 @@ test:
 	go -C tools/md-view test ./...
 	$(MAKE) verify-md-view-css
 	$(MAKE) test-skills
+	sh tests/journal_append_test.sh
 
 install-agent-picker:
 	GOBIN=$(HOME)/.local/bin go -C tools/agent-picker install ./cmd/agent-picker
