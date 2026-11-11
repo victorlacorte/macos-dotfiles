@@ -1,0 +1,131 @@
+{
+  "schema_version": 3,
+  "envelope_keys": [
+    "schema_version",
+    "event_id",
+    "occurred_at",
+    "type",
+    "writer",
+    "task_id",
+    "work_item_id",
+    "attempt_id",
+    "supersedes",
+    "data"
+  ],
+  "attempt_id_pattern": "^(.+)-([1-9][0-9]*)$",
+  "events": {
+    "task.started": {
+      "writer": "parent",
+      "scope": "task",
+      "fields": {
+        "title": "string",
+        "outcome": "string",
+        "acceptance_criteria": "strings",
+        "derived_from": "string?"
+      }
+    },
+    "task.criteria_changed": {
+      "writer": "parent",
+      "scope": "task",
+      "fields": {
+        "acceptance_criteria": "strings",
+        "prompted_by": "string"
+      }
+    },
+    "session.started": {
+      "writer": "parent",
+      "scope": "task",
+      "fields": {
+        "model": "string",
+        "effort": "string?"
+      },
+      "added_fields": {
+        "harness": ["cursor", "codex", null],
+        "conversation_id": "string?",
+        "skill_revision": "revision?",
+        "repository": "string?",
+        "working_directory": "string",
+        "branch": "string?",
+        "starting_commit": "string?",
+        "existing_changes": "strings?",
+        "utc_offset": "string"
+      }
+    },
+    "attempt.finished": {
+      "writer": "hook",
+      "scope": "attempt",
+      "fields": {
+        "role": "string?",
+        "native_child_id": "string?",
+        "child_type": "string?",
+        "requested_model": "string?",
+        "harness_status": "string?",
+        "error_message": "string?",
+        "background": "boolean?",
+        "started_at": "string?",
+        "duration_ms": "count?",
+        "parent_conversation_id": "string?",
+        "child_transcript_path": "string?",
+        "harness_version": "string?"
+      }
+    },
+    "attempt.reviewed": {
+      "writer": "parent",
+      "scope": "attempt",
+      "fields": {
+        "child_status": ["complete", "partial", "blocked", "missing"],
+        "decision": ["accepted", "correction_required", "blocked"],
+        "reason": [
+          null,
+          "missing_context",
+          "unclear_scope",
+          "implementation_defect",
+          "missing_research",
+          "environment_issue",
+          "changed_requirement",
+          "interrupted",
+          "unknown"
+        ],
+        "rationale": "string",
+        "correction": "string?"
+      }
+    },
+    "artifact.linked": {
+      "writer": "parent",
+      "scope": "any",
+      "fields": {
+        "kind": "string",
+        "relationship": "string",
+        "locator": "string"
+      }
+    },
+    "session.finished": {
+      "writer": "parent",
+      "scope": "task",
+      "fields": {
+        "outcome": ["completed", "blocked", "interrupted"],
+        "criteria_met": "strings",
+        "criteria_unmet": "strings",
+        "open_work_items": "strings",
+        "next_steps": "strings",
+        "journal_gaps": "strings"
+      }
+    },
+    "task.completed": {
+      "writer": "parent",
+      "scope": "task",
+      "fields": {
+        "outcome": "string",
+        "artifacts": "strings"
+      }
+    },
+    "task.blocked": {
+      "writer": "parent",
+      "scope": "task",
+      "fields": {
+        "blocker": "string",
+        "artifacts": "strings"
+      }
+    }
+  }
+}
