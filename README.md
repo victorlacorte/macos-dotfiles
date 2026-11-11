@@ -286,17 +286,20 @@ skills install unslop --scope project
 a new authored skill to the allowlist. Upstream skills come only from
 `skills/catalog.json`.
 
-`make stow-agents` runs `stow --restow --no-folding --target="$HOME" agents`.
-It also migrates an existing Stow directory link into real directories with
-symlinks to the locally authored files. This keeps edits to authored skills
-in the checkout while downloaded skills live outside it. Both kinds coexist:
+`make stow-agents` stows the `agents` package with `--no-folding`, except
+the authored skills, which it stows separately as one directory link each.
+Cursor CLI's `/` menu skips a `SKILL.md` symlink whose real path is outside
+the skills directory, so per-file links do not work there. The target also
+migrates earlier layouts (a folded `.agents` or `.agents/skills` link, or
+per-file skill links). This keeps edits to authored skills in the checkout
+while downloaded skills live outside it. Both kinds coexist:
 
 ```text
-~/.agents/skills/                      real directory
-  orchestrate/SKILL.md -> <checkout>/agents/.agents/skills/orchestrate/SKILL.md
-  babysit/SKILL.md     -> <checkout>/agents/.agents/skills/babysit/SKILL.md
-  unslop/                             downloaded catalog skill
-  code-review/                        downloaded catalog skill
+~/.agents/skills/        real directory
+  orchestrate/ -> <checkout>/agents/.agents/skills/orchestrate
+  babysit/     -> <checkout>/agents/.agents/skills/babysit
+  unslop/                downloaded catalog skill
+  code-review/           downloaded catalog skill
 ```
 
 Installs go to `~/.agents/skills`, or the Git root's `.agents/skills` with

@@ -28,8 +28,16 @@ install-md-view:
 	install -m 644 tools/md-view/pandoc/includes/theme-switcher.html "$(HOME)/.local/share/md-view/pandoc/includes/theme-switcher.html"
 	install -m 644 tools/md-view/pandoc/styles/md-view.css "$(HOME)/.local/share/md-view/pandoc/styles/md-view.css"
 
+# Keep authored skills as folded directory links: Cursor CLI's slash menu skips
+# a SKILL.md whose real path is outside the skills root.
 stow-agents:
-	stow --restow --no-folding --target="$(HOME)" agents
+	stow --delete --no-folding --target="$(HOME)" agents
+	if [ -d "$(HOME)/.agents/skills" ]; then \
+		find "$(HOME)/.agents/skills" -mindepth 1 -depth -type d -empty -delete; \
+	fi
+	stow --no-folding --ignore='^\.agents/skills/.+' --target="$(HOME)" agents
+	mkdir -p "$(HOME)/.agents/skills"
+	stow --dir=agents/.agents --target="$(HOME)/.agents/skills" skills
 
 install-skills:
 	install -d "$(HOME)/.local/bin" "$(HOME)/.local/share/macos-dotfiles/skills"
