@@ -440,31 +440,40 @@ grep -q 'use real .agents and .agents/skills directories' "$err" \
   || fail_test 't: missing project layout guidance'
 [ ! -s "$GH_LOG" ] || fail_test 't: gh invoked through a project directory link'
 
-printf 'u. make stow-agents unfolds directory links and coexists with catalog skills\n'
+printf 'u. make stow-agents migrates earlier layouts and coexists with catalog skills\n'
 if command -v stow >/dev/null 2>&1; then
-  for level in skills agents; do
+  for level in skills agents files; do
     stow_home=$tmpdir/stow-home-$level
     mkdir -p "$stow_home"
-    if [ "$level" = skills ]; then
-      mkdir -p "$stow_home/.agents"
-    fi
-    stow --dir="$repo_root" --target="$stow_home" agents
-    if [ "$level" = skills ]; then
-      [ -L "$stow_home/.agents/skills" ] || fail_test 'u: fixture skills directory not folded'
-    else
-      [ -L "$stow_home/.agents" ] || fail_test 'u: fixture agents directory not folded'
-    fi
+    case $level in
+      skills)
+        mkdir -p "$stow_home/.agents"
+        stow --dir="$repo_root" --target="$stow_home" agents
+        [ -L "$stow_home/.agents/skills" ] || fail_test 'u: fixture skills directory not folded'
+        ;;
+      agents)
+        stow --dir="$repo_root" --target="$stow_home" agents
+        [ -L "$stow_home/.agents" ] || fail_test 'u: fixture agents directory not folded'
+        ;;
+      files)
+        stow --dir="$repo_root" --no-folding --target="$stow_home" agents
+        [ -L "$stow_home/.agents/skills/orchestrate/SKILL.md" ] \
+          || fail_test 'u: fixture authored skill not linked per file'
+        ;;
+    esac
     expect_status 0 make -s -C "$repo_root" stow-agents HOME="$stow_home"
     [ ! -L "$stow_home/.agents" ] || fail_test 'u: agents directory still folded'
     [ ! -L "$stow_home/.agents/skills" ] || fail_test 'u: skills directory still folded'
-    local_skill=$stow_home/.agents/skills/orchestrate/SKILL.md
-    [ -L "$local_skill" ] || fail_test 'u: authored skill is not linked'
+    local_skill_dir=$stow_home/.agents/skills/orchestrate
+    local_skill=$local_skill_dir/SKILL.md
+    [ -L "$local_skill_dir" ] || fail_test 'u: authored skill directory is not linked'
+    [ ! -L "$local_skill" ] || fail_test 'u: authored SKILL.md is a file link'
     : > "$GH_LOG"
     expect_status 0 env HOME="$stow_home" "$skills" install --all
     expect_status 0 env HOME="$stow_home" "$skills" update --all
     expect_file "$stow_home/.agents/skills/alpha/SKILL.md" updated
     expect_file "$stow_home/.agents/skills/beta/SKILL.md" updated
-    [ -L "$local_skill" ] || fail_test 'u: catalog operation replaced local link'
+    [ -L "$local_skill_dir" ] || fail_test 'u: catalog operation replaced local link'
     cmp "$local_skill" "$repo_root/agents/.agents/skills/orchestrate/SKILL.md" \
       || fail_test 'u: authored skill changed'
     # Restowing must also preserve catalog skills that are already installed.
