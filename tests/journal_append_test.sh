@@ -77,6 +77,8 @@ append 1 'not json' artifact.linked
 expect_error 'stdin must be a JSON object'
 append 1 '{}' usage.recorded
 expect_error 'unknown event type'
+append 1 '{}' attempt.finished --attempt check-1
+expect_error 'parent types are'
 expect_lines 2
 
 append 0 "$reviewed" attempt.reviewed --attempt check-1
@@ -84,6 +86,16 @@ reviewed_id=$(cat "$tmpdir/stdout.txt")
 expect_jq "select(.event_id == \"$reviewed_id\")
   | .writer == \"parent\" and .task_id == \"20261104-test\"
     and .work_item_id == \"check\" and .attempt_id == \"check-1\" and .supersedes == null"
+
+append 1 "$reviewed" attempt.reviewed --attempt check-1
+expect_error 'attempt.reviewed for check-1 is already recorded'
+append 1 "$reviewed" attempt.reviewed --attempt other-1 --supersedes "$reviewed_id"
+expect_error 'names an event of attempt check-1, not other-1'
+append 0 "$reviewed" attempt.reviewed --attempt check-1 --supersedes "$reviewed_id"
+append 1 "$reviewed" attempt.reviewed --attempt check-1 --supersedes "$reviewed_id"
+expect_error 'already replaced'
+append 0 '{"child_status":"missing","decision":"blocked","reason":"interrupted","rationale":"r","correction":null}' \
+  attempt.reviewed --attempt stopped-1
 
 append 1 "$finished" session.finished --supersedes "$reviewed_id"
 expect_error 'names an event of type attempt.reviewed'
@@ -98,7 +110,7 @@ append 0 "$finished" session.finished --supersedes "$finished_id"
 append 0 '{"model":"m","effort":"high"}' session.started
 append 0 "$artifact" artifact.linked
 
-expect_lines 7
+expect_lines 9
 jq -s -e 'all(.[]; .schema_version == 3
   and (.event_id | test("^[0-9a-f-]{36}$"))
   and (.occurred_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z$")))' "$journal" > /dev/null \

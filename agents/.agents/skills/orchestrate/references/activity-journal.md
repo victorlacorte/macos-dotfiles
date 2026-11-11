@@ -15,7 +15,7 @@ Write `<task-dir>/journal.jsonl`. Append one JSON object per line with a single 
 
 Two writers share the file:
 
-- **Harness hook:** records `attempt.finished` from harness data when the active adapter provides a hook. It recognizes attempts by the brief header from the report contract and ignores other children. Without a hook these events are missing; the parent does not emulate them.
+- **Harness hook:** records `attempt.finished` from harness data when the active adapter provides a hook. It recognizes attempts by the brief header in the dispatch prompt, as the report contract requires, and ignores other children. Without a hook these events are missing; the parent does not emulate them.
 - **Parent:** records task, session, review, and artifact events: judgments and context that only the parent has. Hook events are telemetry; do not infer task state from them.
 
 The parent appends only through [`scripts/journal-append`](../scripts/journal-append), passing the event's `data` object on stdin:
@@ -26,7 +26,7 @@ The parent appends only through [`scripts/journal-append`](../scripts/journal-ap
 EOF
 ```
 
-The script fills the envelope and the measurable `session.started` fields, appends one line, and prints the new `event_id`. Pass `--attempt <attempt_id>` for attempt events and `--supersedes <event_id>` for corrections. It rejects missing or unknown keys, invalid values, and events outside an open session, and writes nothing then; fix the reported problem and retry.
+The script fills the envelope and the measurable `session.started` fields, appends one line, and prints the new `event_id`. Pass `--attempt <attempt_id>` for attempt events and `--supersedes <event_id>` for corrections; a correction names the latest event it replaces, for the same attempt. It rejects missing or unknown keys, invalid values, events outside an open session, and a second review of an attempt without `--supersedes`, and writes nothing then; fix the reported problem and retry.
 
 ## Events
 
@@ -51,7 +51,7 @@ Record unknown metadata as null. The parent supplies exactly the `data` keys bel
 | `task.started` | Parent | `title`, `outcome`, `acceptance_criteria` (list), `derived_from` (earlier `task_id` or null); once per task |
 | `task.criteria_changed` | Parent | `acceptance_criteria` (full current list), `prompted_by` |
 | `session.started` | Parent | `model`, `effort` (null when the model ID encodes it). The script adds `harness`, `conversation_id` (native conversation or thread ID), `skill_revision` (`commit`, `dirty`), `repository` (origin remote, or the Git common directory), `working_directory`, `branch`, `starting_commit`, `existing_changes` (porcelain status lines outside `.scratch`), `utc_offset` |
-| `attempt.finished` | Hook | `role`, `native_child_id`, `child_type`, `requested_model`, `harness_status`, `error_message`, `background`, `started_at` and `duration_ms` (null for background children), `parent_conversation_id`, `child_transcript_path`, `harness_version` |
+| `attempt.finished` | Hook | `role`, `native_child_id`, `child_type`, `requested_model`, `harness_status`, `error_message`, `background`, `started_at` (launch time for background children), `duration_ms` (null for background children), `parent_conversation_id`, `child_transcript_path`, `harness_version` |
 | `attempt.reviewed` | Parent | `child_status` (`complete`, `partial`, `blocked`, or `missing` when no reply arrived), `decision` (`accepted`, `correction_required`, `blocked`), `reason` (null exactly when accepted), `rationale`, `correction` (correction instructions or answers to child questions, or null) |
 | `artifact.linked` | Parent | `kind`, `relationship` to the task, `locator` (stable: PR URL, commit hash, issue URL, or report path); `--attempt` optional |
 | `session.finished` | Parent | `outcome` (`completed`, `blocked`, `interrupted`), `criteria_met`, `criteria_unmet`, `open_work_items`, `next_steps`, `journal_gaps` (all lists) |
@@ -60,9 +60,9 @@ Record unknown metadata as null. The parent supplies exactly the `data` keys bel
 
 Each `task.criteria_changed` records a new state, not a correction: do not set `supersedes` on it unless it fixes a mistaken record.
 
-Record `attempt.reviewed` after reviewing each attempt, including attempts that ended with a question or without a reply. Record corrections and answers in full, so a later session can build the next brief from them. A completed session need not complete its task. Link PRs only from known evidence, not branch-name inference.
+Record one `attempt.reviewed` after reviewing each attempt, including attempts that ended with a question or without a reply. When later evidence changes the decision, such as verification finding a defect in an accepted change, supersede that review. Record corrections and answers in full, so a later session can build the next brief from them. A completed session need not complete its task; when it does, record `task.completed` or `task.blocked` before `session.finished`. Link PRs only from known evidence, not branch-name inference.
 
-Review `reason` values: `missing_context`, `unclear_scope`, `implementation_defect`, `missing_research`, `environment_issue`, `changed_requirement`, or `unknown`. A child question is reviewed as `correction_required` with the reason that explains why the brief was insufficient. Use `blocked` only when the work item cannot continue without something outside the parent's control, such as user input or access.
+Review `reason` values: `missing_context`, `unclear_scope`, `implementation_defect`, `missing_research`, `environment_issue`, `changed_requirement`, `interrupted`, or `unknown`. `interrupted` means the user or the harness stopped the attempt before it finished, not because of the brief; review it with `child_status` `missing` or `partial`, and `decision` `blocked` when the work cannot continue in this session, otherwise `correction_required`. A child question is reviewed as `correction_required` with the reason that explains why the brief was insufficient. Use `blocked` only when the work item cannot continue without something outside the parent's control, such as user input or access.
 
 ## Continuing a task
 

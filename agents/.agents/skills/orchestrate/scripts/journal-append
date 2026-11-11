@@ -1,11 +1,11 @@
 #!/bin/sh
-# Appends one parent event to an orchestrate task journal. Reads the event's
-# data object from stdin, checks it against the contract's keys, stamps the
+# Appends one event to an orchestrate task journal. Reads the event's data
+# object from stdin, checks it against journal-schema.json, stamps the
 # envelope, and prints the new event ID. Writes nothing when a check fails.
 set -eu
 
 usage() {
-  echo "usage: journal-append <task-dir> <type> [--attempt <attempt-id>] [--supersedes <event-id>] < data.json" >&2
+  echo "usage: journal-append <task-dir> <type> [--attempt <attempt-id>] [--supersedes <event-id>] [--writer parent|hook] < data.json" >&2
   exit 2
 }
 
@@ -20,21 +20,30 @@ type=$2
 shift 2
 attempt_id=
 supersedes=
+writer=parent
 while [ $# -gt 0 ]; do
   case $1 in
     --attempt) [ $# -ge 2 ] || usage; attempt_id=$2; shift 2 ;;
     --supersedes) [ $# -ge 2 ] || usage; supersedes=$2; shift 2 ;;
+    --writer)
+      [ $# -ge 2 ] || usage
+      case $2 in parent | hook) writer=$2 ;; *) usage ;; esac
+      shift 2
+      ;;
     *) usage ;;
   esac
 done
 
 command -v jq >/dev/null 2>&1 || fail "jq is required"
+skill_dir=$(dirname "$(dirname "$(realpath "$0")")")
+schema=$skill_dir/scripts/journal-schema.json
+[ -f "$schema" ] || fail "schema not found: $schema"
 [ -d "$task_dir" ] || fail "task directory not found: $task_dir"
 task_dir=$(realpath "$task_dir")
 journal=$task_dir/journal.jsonl
 data=$(cat)
-existing=
-[ -f "$journal" ] && existing=$(cat "$journal")
+existing=/dev/null
+[ -f "$journal" ] && existing=$journal
 
 harness= conversation_id= skill_commit= skill_dirty= in_git=false
 repository= branch= head= changes= utc_offset=
@@ -45,7 +54,6 @@ if [ "$type" = session.started ]; then
     harness=codex conversation_id=$CODEX_THREAD_ID
   fi
 
-  skill_dir=$(dirname "$(dirname "$(realpath "$0")")")
   if skill_commit=$(git -C "$skill_dir" rev-parse HEAD 2>/dev/null); then
     skill_dirty=false
     [ -n "$(git -C "$skill_dir" status --porcelain -- . 2>/dev/null)" ] && skill_dirty=true
@@ -67,13 +75,16 @@ if [ "$type" = session.started ]; then
 fi
 
 event_id=$(uuidgen | tr '[:upper:]' '[:lower:]')
+[ -n "$event_id" ] || fail "uuidgen failed"
 
 result=$(jq -n -c \
+  --slurpfile schema "$schema" \
   --arg type "$type" \
+  --arg writer "$writer" \
   --arg attempt "$attempt_id" \
   --arg sup "$supersedes" \
   --arg data "$data" \
-  --arg existing "$existing" \
+  --rawfile existing "$existing" \
   --arg event_id "$event_id" \
   --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --arg task_id "$(basename -- "$task_dir")" \
@@ -88,69 +99,85 @@ result=$(jq -n -c \
   --arg changes "$changes" \
   --arg cwd "$(pwd -P)" \
   --arg utc_offset "$utc_offset" '
-  def spec: {
-    "task.started": {scope: "task", fields: {
-      title: "string", outcome: "string", acceptance_criteria: "strings", derived_from: "string?"}},
-    "task.criteria_changed": {scope: "task", fields: {
-      acceptance_criteria: "strings", prompted_by: "string"}},
-    "session.started": {scope: "task", fields: {model: "string", effort: "string?"}},
-    "attempt.reviewed": {scope: "attempt", fields: {
-      child_status: ["complete", "partial", "blocked", "missing"],
-      decision: ["accepted", "correction_required", "blocked"],
-      reason: [null, "missing_context", "unclear_scope", "implementation_defect",
-        "missing_research", "environment_issue", "changed_requirement", "unknown"],
-      rationale: "string", correction: "string?"}},
-    "artifact.linked": {scope: "any", fields: {
-      kind: "string", relationship: "string", locator: "string"}},
-    "session.finished": {scope: "task", fields: {
-      outcome: ["completed", "blocked", "interrupted"],
-      criteria_met: "strings", criteria_unmet: "strings", open_work_items: "strings",
-      next_steps: "strings", journal_gaps: "strings"}},
-    "task.completed": {scope: "task", fields: {outcome: "string", artifacts: "strings"}},
-    "task.blocked": {scope: "task", fields: {blocker: "string", artifacts: "strings"}}
-  };
+  def contract: $schema[0];
+  def writer_types: contract.events | with_entries(select(.value.writer == $writer));
+  def is_text: type == "string" and length > 0;
+  def is_strings: type == "array" and all(.[]; type == "string");
   def valid($t):
     . as $v
     | if ($t | type) == "array" then any($t[]; . == $v)
-      elif $t == "string" then type == "string" and length > 0
-      elif $t == "string?" then . == null or (type == "string" and length > 0)
-      else type == "array" and all(.[]; type == "string") end;
+      elif $t == "string" then is_text
+      elif $t == "string?" then . == null or is_text
+      elif $t == "strings" then is_strings
+      elif $t == "strings?" then . == null or is_strings
+      elif $t == "boolean?" then . == null or type == "boolean"
+      elif $t == "count?" then . == null or (type == "number" and . >= 0 and . == floor)
+      elif $t == "revision?" then . == null
+        or (type == "object" and keys == ["commit", "dirty"] and (.commit | is_text)
+          and (.dirty == null or (.dirty | type) == "boolean"))
+      else false end;
   def describe($t):
     if ($t | type) == "array" then "one of \($t | map(tojson) | join(", "))"
     else {"string": "a non-empty string", "string?": "a non-empty string or null",
-      "strings": "an array of strings"}[$t] end;
+      "strings": "an array of strings", "strings?": "an array of strings or null",
+      "boolean?": "a boolean or null", "count?": "a non-negative integer or null",
+      "revision?": "null or {commit, dirty}"}[$t] end;
+  def problems($fields):
+    . as $d
+    | ($fields | keys - ($d | keys) | .[] | "missing key: \(.)"),
+      (($d | keys) - ($fields | keys) | .[] | "unknown key: \(.)"),
+      ($fields | to_entries[] | . as $f
+        | select($d | has($f.key)) | select($d[$f.key] | valid($f.value) | not)
+        | "\($f.key) must be \(describe($f.value))");
   def blank_null: if . == "" then null else . end;
 
   ($existing | split("\n") | map(fromjson? // empty | objects)) as $events
-  | spec[$type] as $s
+  | writer_types[$type] as $s
   | ($data | fromjson? // null) as $d
+  | (if $type != "session.started" then {} else {
+      harness: ($harness | blank_null),
+      conversation_id: ($conversation_id | blank_null),
+      skill_revision: (if $skill_commit == "" then null
+        else {commit: $skill_commit, dirty: ($skill_dirty == "true")} end),
+      repository: ($repository | blank_null),
+      working_directory: $cwd,
+      branch: ($branch | blank_null),
+      starting_commit: ($head | blank_null),
+      existing_changes: (if $in_git == "true"
+        then $changes | split("\n") | map(select(length > 0)) else null end),
+      utc_offset: $utc_offset
+    } end) as $added
   | if $s == null then
-      {errors: ["unknown event type \($type); parent types are \(spec | keys | join(", "))"]}
+      {errors: ["unknown event type \($type); \($writer) types are \(writer_types | keys | join(", "))"]}
     else
       [ if ($d | type) != "object" then "stdin must be a JSON object"
         else
-          ($s.fields | keys - ($d | keys) | .[] | "missing key: \(.)"),
-          (($d | keys) - ($s.fields | keys) | .[] | "unknown key: \(.)"),
-          ($s.fields | to_entries[] | . as $f
-            | select($d | has($f.key)) | select($d[$f.key] | valid($f.value) | not)
-            | "\($f.key) must be \(describe($f.value))"),
+          ($d | problems($s.fields)),
+          ($added | problems($s.added_fields // {}) | "added data: \(.)"),
           (if $type == "attempt.reviewed" and (($d.decision == "accepted") != ($d.reason == null))
             then "reason must be null exactly when decision is accepted" else empty end)
         end,
         (if $s.scope == "attempt" and $attempt == "" then "\($type) requires --attempt"
           elif $s.scope == "task" and $attempt != "" then "\($type) takes no --attempt"
           else empty end),
-        (if $attempt != "" and ($attempt | test("^.+-[1-9][0-9]*$") | not)
+        (if $attempt != "" and ($attempt | test(contract.attempt_id_pattern) | not)
           then "attempt ID must be <work_item_id>-<n>" else empty end),
         (if $sup != "" then
             ($events | map(select(.event_id == $sup)) | first) as $old
             | if $old == null then "--supersedes names no event in the journal: \($sup)"
               elif $old.type != $type then "--supersedes names an event of type \($old.type), not \($type)"
+              elif ($old.attempt_id // "") != $attempt
+                then "--supersedes names an event of attempt \($old.attempt_id // "none"), not \($attempt | blank_null // "none")"
+              elif any($events[]; .supersedes == $sup)
+                then "--supersedes names an event that is already replaced; name its latest replacement"
               else empty end
           else empty end),
         (if $type == "task.started" and $sup == "" and any($events[]; .type == "task.started")
           then "task.started is already recorded; correct it with --supersedes" else empty end),
-        (if $sup == "" and ($type | IN("task.started", "session.started") | not)
+        (if $type == "attempt.reviewed" and $sup == ""
+            and any($events[]; .type == "attempt.reviewed" and .attempt_id == $attempt)
+          then "attempt.reviewed for \($attempt) is already recorded; correct it with --supersedes" else empty end),
+        (if $writer == "parent" and $sup == "" and ($type | IN("task.started", "session.started") | not)
             and ([$events[] | select(.writer == "parent"
               and (.type | IN("session.started", "session.finished")))] | last | .type)
               != "session.started"
@@ -158,28 +185,16 @@ result=$(jq -n -c \
       ] as $errors
       | if ($errors | length) > 0 then {errors: $errors}
         else {event: {
-          schema_version: 3,
+          schema_version: contract.schema_version,
           event_id: $event_id,
           occurred_at: $now,
           type: $type,
-          writer: "parent",
+          writer: $writer,
           task_id: $task_id,
-          work_item_id: ($attempt | blank_null | if . then sub("-[0-9]+$"; "") else null end),
+          work_item_id: ($attempt | blank_null | if . then match(contract.attempt_id_pattern).captures[0].string else null end),
           attempt_id: ($attempt | blank_null),
           supersedes: ($sup | blank_null),
-          data: (if $type != "session.started" then $d else $d + {
-            harness: ($harness | blank_null),
-            conversation_id: ($conversation_id | blank_null),
-            skill_revision: (if $skill_commit == "" then null
-              else {commit: $skill_commit, dirty: ($skill_dirty == "true")} end),
-            repository: ($repository | blank_null),
-            working_directory: $cwd,
-            branch: ($branch | blank_null),
-            starting_commit: ($head | blank_null),
-            existing_changes: (if $in_git == "true"
-              then $changes | split("\n") | map(select(length > 0)) else null end),
-            utc_offset: $utc_offset
-          } end)
+          data: ($d + $added)
         }}
         end
     end')
