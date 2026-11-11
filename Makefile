@@ -1,4 +1,4 @@
-.PHONY: test install-agent-picker install-tmux-snapshot install-md-view stow-agents install-skills test-skills build-md-view-css verify-md-view-css
+.PHONY: test install-agent-picker install-tmux-snapshot install-md-view install-orchestrate-journal test-orchestrate-journal stow-agents install-skills test-skills build-md-view-css verify-md-view-css
 
 test:
 	go -C tools/agent-picker test ./...
@@ -7,6 +7,7 @@ test:
 	$(MAKE) verify-md-view-css
 	$(MAKE) test-skills
 	sh tests/journal_append_test.sh
+	$(MAKE) test-orchestrate-journal
 
 install-agent-picker:
 	GOBIN=$(HOME)/.local/bin go -C tools/agent-picker install ./cmd/agent-picker
@@ -27,6 +28,17 @@ install-md-view:
 	install -m 644 tools/md-view/pandoc/includes/source-copy.html "$(HOME)/.local/share/md-view/pandoc/includes/source-copy.html"
 	install -m 644 tools/md-view/pandoc/includes/theme-switcher.html "$(HOME)/.local/share/md-view/pandoc/includes/theme-switcher.html"
 	install -m 644 tools/md-view/pandoc/styles/md-view.css "$(HOME)/.local/share/md-view/pandoc/styles/md-view.css"
+
+# Links the checkout's entry point: Node strips the TypeScript types at run time.
+install-orchestrate-journal:
+	install -d "$(HOME)/.local/bin"
+	ln -sf "$(CURDIR)/tools/orchestrate-journal/src/cli.ts" "$(HOME)/.local/bin/orchestrate-journal"
+
+tools/orchestrate-journal/node_modules: tools/orchestrate-journal/package.json tools/orchestrate-journal/package-lock.json
+	npm ci --prefix tools/orchestrate-journal
+
+test-orchestrate-journal: tools/orchestrate-journal/node_modules
+	cd tools/orchestrate-journal && npm exec -- tsc --noEmit && npm test
 
 # Keep authored skills as folded directory links: Cursor CLI's slash menu skips
 # a SKILL.md whose real path is outside the skills root.
