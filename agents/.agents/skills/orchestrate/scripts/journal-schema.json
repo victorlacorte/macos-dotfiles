@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "envelope_keys": [
     "schema_version",
     "event_id",

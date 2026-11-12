@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { analyze, type Analysis } from '../src/analyze.ts';
+import { analyze, InvalidJournalsError, type Analysis } from '../src/analyze.ts';
 import { renderMarkdown } from '../src/render.ts';
 import {
   attemptFinished,
@@ -77,7 +77,7 @@ function buildFixture() {
       event(
         'attempt.finished',
         'hook',
-        attemptFinished('c3', join(transcripts, 'subagents', 'gone.jsonl'), { role: 'explorer', background: true, duration_ms: null, started_at: null }),
+        attemptFinished('c3', join(transcripts, 'subagents', 'gone.jsonl'), { role: 'explorer', background: true, duration_ms: null }),
         { task_id, attempt_id: 'verify-1' },
       ),
       event('attempt.reviewed', 'parent', review('accepted'), { task_id, attempt_id: 'verify-1' }),
@@ -168,10 +168,9 @@ test('splits a shared parent conversation by task and estimates background durat
         event('session.started', 'parent', { ...sessionStarted('conv-1'), model: 'Claude-Opus-5.5' }, { task_id: id }),
         ...(id === '20261106-a'
           ? [
-              event('attempt.finished', 'hook', attemptFinished('c1', childPath, { background: true, duration_ms: null, started_at: null }), {
+              event('attempt.finished', 'hook', attemptFinished('c1', childPath, { background: true, duration_ms: null, started_at: '2026-11-06T12:00:00Z' }), {
                 task_id: id,
                 attempt_id: 'map-1',
-                occurred_at: '2026-11-06T12:00:00Z',
               }),
             ]
           : []),
@@ -260,10 +259,34 @@ test('recovers dispatch fields from the parent transcript when the hook missed a
   ]);
 });
 
-test('CLI prints JSON and rejects missing arguments', () => {
+function writeInvalidJournal(root: string): string {
+  const id = '20261111-invalid';
+  return write(join(root, id, 'journal.jsonl'), jsonl([event('task.started', 'parent', { ...taskStarted, context: 'extra' }, { task_id: id })]));
+}
+
+test('refuses to analyze when any journal is invalid, listing every invalid journal', () => {
+  const { journalPath, cursorDir } = buildFixture();
+  const root = tempDir();
+  const invalid = writeInvalidJournal(root);
+  const missing = join(root, 'missing', 'journal.jsonl');
+  assert.throws(() => analyze([journalPath, invalid, missing], { cursor_dir: cursorDir }), (error: unknown) => {
+    assert.ok(error instanceof InvalidJournalsError);
+    assert.match(error.message, /^invalid journals\n/);
+    assert.match(error.message, /20261111-invalid\/journal\.jsonl:\n {2}line 1 \(task\.started\): unknown key: context/);
+    assert.match(error.message, /missing\/journal\.jsonl: cannot read journal: ENOENT/);
+    return true;
+  });
+});
+
+test('CLI prints JSON, fails on invalid journals, and rejects missing arguments', () => {
   const { journalPath, cursorDir } = buildFixture();
   const cli = join(import.meta.dirname, '..', 'src', 'cli.ts');
   const output = execFileSync(cli, ['analyze', '--json', '--cursor-dir', cursorDir, journalPath], { encoding: 'utf8' });
   assert.equal((JSON.parse(output) as Analysis).tasks[0]?.attempts.length, 4);
+  assert.throws(() => execFileSync(cli, ['analyze', '--cursor-dir', cursorDir, writeInvalidJournal(tempDir())], { stdio: 'pipe' }), {
+    status: 1,
+    stdout: Buffer.alloc(0),
+  });
   assert.throws(() => execFileSync(cli, ['analyze'], { stdio: 'pipe' }), { status: 2 });
+  assert.throws(() => execFileSync(cli, ['migrate', journalPath], { stdio: 'pipe' }), { status: 2 });
 });
