@@ -111,9 +111,15 @@ append 0 '{"model":"m","effort":"high"}' session.started
 append 0 "$artifact" artifact.linked
 
 expect_lines 9
-jq -s -e 'all(.[]; .schema_version == 3
+jq -s -e 'all(.[]; .schema_version == 4
   and (.event_id | test("^[0-9a-f-]{36}$"))
   and (.occurred_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z$")))' "$journal" > /dev/null \
   || fail_test 'envelope fields are malformed'
+
+jq -c '.schema_version = 3' "$journal" > "$tmpdir/old.jsonl"
+mv "$tmpdir/old.jsonl" "$journal"
+append 1 "$artifact" artifact.linked
+expect_error 'journal has schema_version 3, not 4; start a new task directory'
+expect_lines 9
 
 printf 'ok\n'

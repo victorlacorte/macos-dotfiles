@@ -26,7 +26,7 @@ The parent appends only through [`scripts/journal-append`](../scripts/journal-ap
 EOF
 ```
 
-The script fills the envelope and the measurable `session.started` fields, appends one line, and prints the new `event_id`. Pass `--attempt <attempt_id>` for attempt events and `--supersedes <event_id>` for corrections; a correction names the latest event it replaces, for the same attempt. It rejects missing or unknown keys, invalid values, events outside an open session, and a second review of an attempt without `--supersedes`, and writes nothing then; fix the reported problem and retry.
+The script fills the envelope and the measurable `session.started` fields, appends one line, and prints the new `event_id`. Pass `--attempt <attempt_id>` for attempt events and `--supersedes <event_id>` for corrections; a correction names the latest event it replaces, for the same attempt. It rejects missing or unknown keys, invalid values, events outside an open session, and a second review of an attempt without `--supersedes`, and writes nothing then; fix the reported problem and retry. It also rejects every event for a journal written under another `schema_version`; continue that work in a new task directory whose `task.started` names the old task in `derived_from`.
 
 ## Events
 
@@ -34,7 +34,7 @@ Every event uses this envelope, which the writer fills:
 
 | Field | Value |
 | --- | --- |
-| `schema_version` | `3` |
+| `schema_version` | `4` |
 | `event_id` | Unique within the task |
 | `occurred_at` | UTC RFC 3339 timestamp |
 | `type` | Event name below |

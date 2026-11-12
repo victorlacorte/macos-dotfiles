@@ -75,11 +75,10 @@ export function isValid(value: unknown, type: FieldType): boolean {
       if (value === null) return true;
       if (typeof value !== 'object' || Array.isArray(value)) return false;
       const revision = value as Record<string, unknown>;
-      // Migrated journals keep a known commit with an unknown dirty state.
       return (
         Object.keys(revision).sort().join(',') === 'commit,dirty' &&
         isNonEmptyString(revision.commit) &&
-        (revision.dirty === null || typeof revision.dirty === 'boolean')
+        typeof revision.dirty === 'boolean'
       );
     }
   }

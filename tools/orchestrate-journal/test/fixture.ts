@@ -31,7 +31,7 @@ export function event(
   counter++;
   const attemptId = options.attempt_id ?? null;
   return {
-    schema_version: 3,
+    schema_version: 4,
     event_id: options.event_id ?? `e${counter}`,
     occurred_at: options.occurred_at ?? new Date(Date.UTC(2026, 10, 4, 12, 0, counter)).toISOString().replace('.000', ''),
     type,

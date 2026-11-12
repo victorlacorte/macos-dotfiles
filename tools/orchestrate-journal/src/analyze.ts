@@ -13,8 +13,16 @@ import {
   type ParentStats,
   type Transcript,
 } from './cursor.ts';
-import { readJournal, type Gap, type Journal, type JournalEvent } from './journal.ts';
+import { JournalError, readJournal, type Journal, type JournalEvent } from './journal.ts';
 import { attemptIdPattern } from './schema.ts';
+
+// Data the analysis could not obtain from transcripts, briefs, reports, or the
+// hook; journal contract violations throw instead.
+export interface Gap {
+  task_id: string;
+  attempt_id: string | null;
+  message: string;
+}
 
 export interface AttemptRecord {
   attempt_id: string;
@@ -137,6 +145,12 @@ export interface AnalyzeOptions {
   cursor_dir: string;
 }
 
+export class InvalidJournalsError extends Error {
+  constructor(errors: string[]) {
+    super(`invalid journals\n${errors.join('\n')}`);
+  }
+}
+
 const str = (value: unknown): string | null => (typeof value === 'string' ? value : null);
 const strings = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
@@ -154,13 +168,9 @@ export const modelLabel = (model: string | null): string | null =>
   model === null ? null : model.toLowerCase().replace(/(\d)\.(\d)/g, '$1-$2');
 
 export function revisionLabel(revision: unknown): string {
-  if (typeof revision !== 'object' || revision === null) return 'unknown';
-  const { commit, dirty } = revision as { commit?: unknown; dirty?: unknown };
-  if (typeof commit !== 'string') return 'unknown';
-  const short = commit.slice(0, 12);
-  if (dirty === true) return `${short}+dirty`;
-  if (dirty === false) return short;
-  return `${short}+dirty?`;
+  if (revision === null) return 'unknown';
+  const { commit, dirty } = revision as { commit: string; dirty: boolean };
+  return `${commit.slice(0, 12)}${dirty ? '+dirty' : ''}`;
 }
 
 function briefRole(path: string): string | null {
@@ -206,9 +216,7 @@ function analyzeTask(journal: Journal, options: AnalyzeOptions, readParent: Tran
   const ofType = (type: string) => events.filter((event) => event.type === type);
 
   const sessions: SessionRecord[] = journal.sessions.map((start, index) => {
-    const finishes = ofType('session.finished').filter((event) => event.session === index);
-    if (finishes.length > 1) gap(`session ${index + 1}: ${finishes.length} session.finished events; the latest is used`);
-    const finish = finishes.at(-1);
+    const finish = ofType('session.finished').find((event) => event.session === index);
     return {
       index,
       conversation_id: str(start.data.conversation_id),
@@ -266,12 +274,9 @@ function analyzeTask(journal: Journal, options: AnalyzeOptions, readParent: Tran
     if (match === null) continue;
     const attemptGap = (message: string) => gap(message, attemptId);
     const finishes = attemptEventList.filter((event) => event.type === 'attempt.finished');
-    const reviews = attemptEventList.filter((event) => event.type === 'attempt.reviewed');
     if (finishes.length > 1) attemptGap(`${finishes.length} attempt.finished events; the latest is used`);
-    if (reviews.length > 1) attemptGap(`${reviews.length} current attempt.reviewed events; the latest is used`);
-    const finishEvent = finishes.at(-1);
-    const finish = finishEvent?.data ?? null;
-    const review = reviews.at(-1)?.data ?? null;
+    const finish = finishes.at(-1)?.data ?? null;
+    const review = attemptEventList.find((event) => event.type === 'attempt.reviewed')?.data ?? null;
     // An attempt known only from its brief was dispatched in the latest session.
     const sessionIndex = attemptEventList.length === 0 ? sessions.length - 1 : (attemptEventList[0]?.session ?? null);
     const session = sessionIndex === null ? undefined : sessions[sessionIndex];
@@ -319,8 +324,7 @@ function analyzeTask(journal: Journal, options: AnalyzeOptions, readParent: Tran
     let duration = typeof finish?.duration_ms === 'number' ? finish.duration_ms : null;
     let durationEstimated = false;
     if (duration === null && background === true && lastWrite !== null) {
-      // Hooks before 2026-11-11 left started_at null; they ran at launch, so the event time stands in.
-      const launched = Date.parse(str(finish?.started_at) ?? finishEvent?.occurred_at ?? '');
+      const launched = Date.parse(str(finish?.started_at) ?? '');
       if (!Number.isNaN(launched) && lastWrite > launched) {
         duration = Math.round(lastWrite - launched);
         durationEstimated = true;
@@ -541,25 +545,24 @@ function aggregateParents(tasks: TaskRecord[]): Analysis['parent_by_skill_revisi
   return groups;
 }
 
+// Throws when any journal cannot be read or breaks the contract, listing every
+// such journal, so no metrics come from a partial set.
 export function analyze(journalPaths: string[], options: AnalyzeOptions): Analysis {
-  const gaps: Gap[] = [];
-  const analyses: TaskAnalysis[] = [];
-  const readParent = transcriptCache();
-  const seen = new Set<string>();
+  const journals = new Map<string, Journal>();
+  const errors: string[] = [];
   for (const path of journalPaths) {
-    let journal: Journal;
     try {
-      journal = readJournal(path);
+      const journal = readJournal(path);
+      journals.set(journal.path, journal);
     } catch (error) {
-      gaps.push({ task_id: path, attempt_id: null, message: `cannot read journal: ${(error as Error).message}` });
-      continue;
+      errors.push(error instanceof JournalError ? error.message : `${path}: cannot read journal: ${(error as Error).message}`);
     }
-    if (seen.has(journal.path)) continue;
-    seen.add(journal.path);
-    gaps.push(...journal.gaps);
-    if (journal.skipped) continue;
-    analyses.push(analyzeTask(journal, options, readParent, gaps));
   }
+  if (errors.length > 0) throw new InvalidJournalsError(errors);
+
+  const gaps: Gap[] = [];
+  const readParent = transcriptCache();
+  const analyses = [...journals.values()].map((journal) => analyzeTask(journal, options, readParent, gaps));
   addConversations(analyses, readParent, gaps);
 
   const tasks = analyses.map(({ task }) => task);
