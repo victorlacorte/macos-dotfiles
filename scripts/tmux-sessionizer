@@ -5,7 +5,7 @@
 if [ "$#" -eq 1 ]; then
   selected=$1
 else
-  selected=$(find "$HOME" "$HOME/coding" "$HOME/coding/origin" "$HOME/coding/pocs" "$HOME/coding/victorlacorte" "$HOME/notes" -maxdepth 2 \( -type d -o -type f \) -name .git -print 2>/dev/null | xargs -n1 dirname | sort -u | fzf)
+  selected=$(find "$HOME" "$HOME/coding" "$HOME/coding/origin" "$HOME/coding/pocs" "$HOME/coding/victorlacorte" "$HOME/digital-garden" "$HOME/notes" -maxdepth 2 \( -type d -o -type f \) -name .git -print 2>/dev/null | xargs -n1 dirname | sort -u | fzf)
 fi
 
 if [ -z "$selected" ]; then
