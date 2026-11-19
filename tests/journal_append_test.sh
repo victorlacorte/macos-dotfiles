@@ -25,7 +25,7 @@ append() {
   data=$2
   shift 2
   got=0
-  printf '%s' "$data" | env -u CODEX_THREAD_ID CURSOR_CONVERSATION_ID=conv-1 \
+  printf '%s' "$data" | env -u CODEX_THREAD_ID -u CLAUDE_CODE_SESSION_ID CURSOR_CONVERSATION_ID=conv-1 \
     "$append" "$task" "$@" > "$tmpdir/stdout.txt" 2> "$err" || got=$?
   [ "$got" -eq "$want" ] || fail_test "expected exit $want from $*, got $got: $(cat "$err")"
 }
@@ -121,5 +121,16 @@ mv "$tmpdir/old.jsonl" "$journal"
 append 1 "$artifact" artifact.linked
 expect_error 'journal has schema_version 3, not 4; start a new task directory'
 expect_lines 9
+
+claude_task=$tmpdir/20261116-claude
+mkdir -p "$claude_task"
+printf '%s' "$task_started" | env -u CURSOR_CONVERSATION_ID -u CODEX_THREAD_ID \
+  "$append" "$claude_task" task.started > /dev/null 2> "$err" || fail_test "$(cat "$err")"
+printf '%s' '{"model":"m","effort":"medium"}' | env -u CURSOR_CONVERSATION_ID -u CODEX_THREAD_ID \
+  CLAUDE_CODE_SESSION_ID=session-1 "$append" "$claude_task" session.started > /dev/null 2> "$err" \
+  || fail_test "$(cat "$err")"
+jq -e 'select(.type == "session.started") | .data
+  | .harness == "claude-code" and .conversation_id == "session-1"' "$claude_task/journal.jsonl" > /dev/null \
+  || fail_test 'Claude Code session is not attributed'
 
 printf 'ok\n'

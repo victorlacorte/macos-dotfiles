@@ -25,7 +25,8 @@ test-orchestrate-journal: tools/orchestrate-journal/node_modules
 	cd tools/orchestrate-journal && npm exec -- tsc --noEmit && npm test
 
 # Keep authored skills as folded directory links: Cursor CLI's slash menu skips
-# a SKILL.md whose real path is outside the skills root.
+# a SKILL.md whose real path is outside the skills root. Claude Code reads
+# ~/.claude/skills instead of ~/.agents/skills, so link them there too.
 stow-agents:
 	stow --delete --no-folding --target="$(HOME)" agents
 	if [ -d "$(HOME)/.agents/skills" ]; then \
@@ -34,6 +35,8 @@ stow-agents:
 	stow --no-folding --ignore='^\.agents/skills/.+' --target="$(HOME)" agents
 	mkdir -p "$(HOME)/.agents/skills"
 	stow --dir=agents/.agents --target="$(HOME)/.agents/skills" skills
+	mkdir -p "$(HOME)/.claude/skills"
+	stow --dir=agents/.agents --target="$(HOME)/.claude/skills" skills
 
 install-skills:
 	install -d "$(HOME)/.local/bin" "$(HOME)/.local/share/macos-dotfiles/skills"

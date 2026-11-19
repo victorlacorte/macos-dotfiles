@@ -4,4 +4,4 @@ Use the [saved role defaults](subagents.md) and the fields exposed by the active
 
 Check that the child has the tools needed for its task. If the tool cannot express a required choice or capability, report the limitation instead of silently changing the selection. See the [Codex subagents documentation](https://learn.chatgpt.com/docs/agent-configuration/subagents) for native agent configuration.
 
-No journal hook is configured for Codex, so `attempt.finished` events are absent; do not record them yourself. `journal-append` records `$CODEX_THREAD_ID` as the `session.started` conversation ID; it names the session log `~/.codex/sessions/YYYY/MM/DD/rollout-*-<thread-id>.jsonl`, from which analysis derives token usage.
+No journal hook is configured for Codex, so `attempt.finished` events are absent; do not record them yourself. `journal-append` records `$CODEX_THREAD_ID` as the `session.started` conversation ID; it names the session log `~/.codex/sessions/YYYY/MM/DD/rollout-*-<thread-id>.jsonl`.

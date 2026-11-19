@@ -10,7 +10,7 @@ Coordinate bounded subagent tasks to reduce expensive parent work and keep noisy
 
 ## Before dispatch
 
-Read the canonical [subagent policy](references/subagents.md) and the active harness adapter: [Cursor](references/cursor.md) or [Codex](references/codex.md). Use only the adapter for the current harness. These are saved instructions for the orchestrator, not settings installed into the harness. Follow the policy for resolving and checking configured choices.
+Read the canonical [subagent policy](references/subagents.md) and the active harness adapter: [Cursor](references/cursor.md), [Codex](references/codex.md), or [Claude Code](references/claude-code.md). Use only the adapter for the current harness. These are saved instructions for the orchestrator, not settings installed into the harness. Follow the policy for resolving and checking configured choices.
 
 ## Delegation and context
 

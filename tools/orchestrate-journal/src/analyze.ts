@@ -238,6 +238,10 @@ function analyzeTask(journal: Journal, options: AnalyzeOptions, readParent: Tran
       gap(`session ${session.index + 1}: Codex rollouts are not analyzed yet`);
       continue;
     }
+    if (session.harness === 'claude-code') {
+      gap(`session ${session.index + 1}: Claude Code transcripts are not analyzed yet`);
+      continue;
+    }
     if (session.harness !== 'cursor') {
       gap(`session ${session.index + 1}: unknown harness ${JSON.stringify(session.harness)}; parent transcript not read`);
       continue;

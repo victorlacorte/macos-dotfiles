@@ -52,6 +52,8 @@ if [ "$type" = session.started ]; then
     harness=cursor conversation_id=$CURSOR_CONVERSATION_ID
   elif [ -n "${CODEX_THREAD_ID:-}" ]; then
     harness=codex conversation_id=$CODEX_THREAD_ID
+  elif [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+    harness=claude-code conversation_id=$CLAUDE_CODE_SESSION_ID
   fi
 
   if skill_commit=$(git -C "$skill_dir" rev-parse HEAD 2>/dev/null); then

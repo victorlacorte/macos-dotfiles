@@ -14,6 +14,9 @@ Check the resolved model, effort, type, and capabilities against the active spaw
 | Codex | Implementer | Generic spawn agent | `gpt-6-luna` | `medium` |
 | Codex | Researcher | Generic spawn agent | `gpt-6-luna` | `medium` |
 | Codex | Explorer | Generic spawn agent | `gpt-6-luna` | `medium` |
+| Claude Code | Implementer | `general-purpose` | `sonnet` | `medium` |
+| Claude Code | Researcher | `general-purpose` | `haiku` | `medium` |
+| Claude Code | Explorer | `general-purpose` | `haiku` | `medium` |
 
 Use the active harness adapter to map these choices to supported tool fields.
 

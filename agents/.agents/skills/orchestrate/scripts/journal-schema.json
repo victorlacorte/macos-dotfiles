@@ -40,7 +40,7 @@
         "effort": "string?"
       },
       "added_fields": {
-        "harness": ["cursor", "codex", null],
+        "harness": ["cursor", "codex", "claude-code", null],
         "conversation_id": "string?",
         "skill_revision": "revision?",
         "repository": "string?",
