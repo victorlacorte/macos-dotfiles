@@ -1,217 +1,43 @@
 # My macOS dotfiles
 
-## Requirements
+Each top-level config directory (`git`, `tmux`, `nvim`, `zsh`, ...) is a
+[GNU Stow](https://www.gnu.org/software/stow/) package. Stow the ones you want
+into `$HOME`. `agents` and `etc` have their own steps, see [Agents](docs/agents.md):
 
 ```sh
-stow --no --verbose --target=$HOME ...
-brew install pinentry-mac
-brew install tree-sitter-cli
-brew install fzf
+stow --no --verbose --target=$HOME tmux   # dry run, then drop --no
+brew install pinentry-mac tree-sitter-cli fzf
 ```
 
-The tmux agent picker and snapshot sources live in `tools/agent-picker` and
-`tools/tmux-snapshot`, and require Go 1.22 or newer. Build and install them
-locally from the repository root with:
+## Local tools
+
+Go 1.22 or newer is required. From the repository root:
 
 ```sh
-make install-agent-picker
-make install-tmux-snapshot
+make install-agent-picker install-tmux-snapshot   # into ~/.local/bin
+make install-orchestrate-journal                  # needs Node, links the checkout
+make test
 ```
 
-These install `agent-picker` and `tmux-snapshot` in `$HOME/.local/bin`.
-Re-run the relevant command after updating these dotfiles to rebuild the
-binaries. The binaries are local build artifacts and are not committed.
+Binaries are local build artifacts. Re-run the targets after updating.
 
-## Codex
+## Guides
 
-Shared Codex settings live in `etc/codex/config.toml` and are installed
-as `/etc/codex/config.toml`. The system config adds `~/.codex/plans/` as a
-writable root for `workspace-write` sessions, sets the status line, and holds
-the disabled `shadcn` and `chrome_devtools` MCP servers.
+- [Tmux](docs/tmux.md): sessionizer, agent picker (`prefix u`), snapshots.
+- [Agents](docs/agents.md): Codex system config, shared skills, `skills` wrapper.
+- [YubiKey](docs/yubikey.md): PIN management with `ykman`.
 
-The Stow command in Requirements applies to packages installed under `$HOME`.
-This Codex system config is the `etc` Stow package. Run from the repository
-root and target `/etc`, which requires administrator privileges:
+## Git signing
 
-```sh
-mkdir -p "$HOME/.codex/plans"
-sudo "$(command -v stow)" --target=/etc etc
-```
+Pick the `[S]` key from `gpg --list-secret-keys --keyid-format LONG` and put
+its full subkey fingerprint in `git/.gitconfig.local` (git-ignored):
 
-Stow stops if an unmanaged `config.toml` already exists there. Inspect it
-before removing or replacing it.
-
-Stow creates a relative symlink at `/etc/codex/config.toml`. If the repository
-moves, remove that link and stow the package again from the new checkout. Use
-`codex ...` directly; no shell wrapper adds arguments.
-
-The `agents/.codex/general.config.toml` profile remains available for explicit
-`--profile general` use. Stow it to create `~/.codex/general.config.toml`:
-
-```sh
-make stow-agents
-```
-
-The profile retains its model, reasoning, sandbox, and project trust settings.
-It overlays the private `~/.codex/config.toml`; it does not replace or manage
-that file. Keep client-specific values such as project trust in the private
-config. `agents/.codex/AGENTS.md` documents the handoff workflow, but the
-system config grants the plans directory access.
-
-## Tmux
-
-`prefix Space` opens the project sessionizer.
-
-`prefix u` opens one picker for foreground Claude Code, Codex, and Cursor CLI
-sessions in tmux panes. It shows the provider, approximate last-write age, tmux
-location, working path, and a live pane preview. Press `enter` to jump to a
-session or `ctrl-x` to send SIGTERM to its process and reload the list.
-
-Discovery joins processes to tmux panes by TTY and checks their foreground
-process group. Known headless and service invocations, including Claude/Cursor
-print mode and `codex exec`, `review`, and `app-server`, are excluded using OS
-argument boundaries. Detached, background, IDE, desktop, and cloud sessions
-without a foreground tmux process are outside this picker's scope. Processes
-with unreadable arguments or start times are omitted. This remains passive,
-best-effort detection; new harness modes may need additional filtering.
-
-Claude discovery reads interactive session files under `CLAUDE_CONFIG_DIR`
-(or `~/.claude`) and verifies the live command and that the record is not older
-than the process. Native `claude` and the npm Claude CLI under Node are
-recognized. Its age is the newest matching project transcript mtime, and its
-working path comes from the session record.
-
-Codex discovery matches the configured process basename (default `codex`).
-Cursor discovery resolves `cursor-agent` or `agent` on PATH into the Cursor
-installation and recognizes its launchers and bundled Node runtime, including
-older versions under the same installation root. Automatic `agent` fallback
-requires a Cursor installation path so unrelated programs named `agent` do not
-qualify. An explicit launcher option takes precedence over automatic discovery.
-
-The picker follows ancestors through wrappers within the foreground job and
-reports the outer matching harness process. Multiple independent matching roots
-in the same foreground job are ambiguous and omitted. Files held by descendants
-in that job can contribute activity even when a shell wrapper intervenes.
-
-Codex age comes from open `$CODEX_HOME/sessions/**/rollout-*.jsonl` files.
-Cursor age comes from open `store.db` or `store.db-wal` files under its config
-root's `chats` directory, resolved from `CURSOR_CONFIG_DIR`, then
-`$XDG_CONFIG_HOME/cursor`, then `~/.cursor`. These private storage layouts and
-file mtimes are approximate write-recency signals, not a measure of current
-work. Missing `lsof` or a matching open file leaves the age unknown (`-`);
-shared log databases are never used as a substitute. Codex and Cursor show
-the pane's current working path.
-
-Before termination, the picker rediscovers the provider and pane, then rechecks
-the process start time, command, parent, TTY, process group, and invocation mode.
-Changed or backgrounded targets are refused with a tmux message. Only the
-validated PID receives SIGTERM; descendants are not explicitly signalled.
-The start-time check has the second precision supplied by `ps`, and the final
-check and signal are separate OS operations.
-
-Runtime requirements are tmux 3.2 or newer, `fzf`, and readable macOS process
-metadata. Codex needs its
-configured executable on PATH; Cursor needs a recognized launcher. Claude
-session files are decoded directly, so neither the Claude executable nor `jq`
-is required on PATH. Missing optional commands disable only the corresponding
-provider or activity metadata.
-
-The popup and `fzf` frame appear immediately while agent discovery runs. When
-no running agents match the selected provider, the empty picker closes and a
-concise tmux message appears on the originating client. `agent-picker list`
-remains machine-readable, producing no output and exiting successfully for an
-empty result.
-
-The command requires an explicit action and accepts an optional provider:
-
-```text
-agent-picker popup [-provider all|claude|codex|cursor] [TMUX_CLIENT]
-agent-picker select [-provider all|claude|codex|cursor]
-agent-picker list [-provider all|claude|codex|cursor] [-identities]
-agent-picker terminate -provider PROVIDER -pane PANE -pid PID -identity IDENTITY
-```
-
-Both `-provider` and `--provider` are accepted.
-For `popup`, place the provider flag before `TMUX_CLIENT`.
-
-The generic tmux options and defaults are:
-
-```tmux
-set -g @agent_popup_width       '90%'
-set -g @agent_popup_height      '90%'
-set -g @agent_fzf_options       ''
-set -g @codex_agent_process_name 'codex'
-set -g @cursor_agent_process_name '' # automatic cursor-agent / agent discovery
-```
-
-`@cursor_agent_process_name` can select a specific launcher, such as `agent`,
-`cursor-agent`, or an absolute path. Leave it empty for automatic discovery.
-An explicitly configured missing launcher disables the Cursor provider.
-
-Normal `list` output retains seven TSV fields. `list -identities` appends an
-opaque eighth field used by the picker's `terminate` helper. The helper requires
-a specific provider, pane, PID, and identity from discovery; it does not accept
-a PID alone. These action fields are hidden in fzf.
-
-Selecting an agent focuses its tmux session, window, and pane in place.
-
-The provider adapters use structured Go values internally and only format TSV
-at the fzf boundary, so a future Codex app-server adapter can replace passive
-process discovery and add richer activity metadata without changing the picker
-UI.
-
-The Claude metadata adapter is adapted from
-`craftzdog/tmux-claude-session-manager`; see `THIRD_PARTY_NOTICES.md` for the
-upstream MIT license notice.
-
-### Tmux snapshots
-
-Save and restore tmux sessions, project directories, and the attached-session
-selection:
-
-```sh
-tmux-snapshot save
-tmux-snapshot restore
-```
-
-Snapshots preserve session names, directories, and whether each session was
-attached when it was saved, in tmux session-index order. Restore creates one
-default shell window for each missing session. Windows, panes, commands or
-processes, layouts, and scrollback are not captured.
-
-Snapshots use version 2. Version 1 snapshots are not supported. After
-upgrading from version 1, run `tmux-snapshot save` before restoring;
-old snapshot files remain on disk and are not rewritten.
-
-The snapshot is stored as JSON at
-`${XDG_STATE_HOME:-$HOME/.local/state}/tmux-snapshot/latest`. Each save
-atomically replaces this file. Neither command accepts a file path.
-
-An existing `latest` symlink from an older installation can still be restored;
-the next save replaces the symlink with a regular file. Old timestamped
-snapshots remain on disk but are no longer used.
-
-Restore only adds sessions. A session whose name already exists is left
-untouched, and one whose recorded path no longer exists is skipped with a
-warning. If creating one session fails, restore reports the failure and
-continues with the remaining sessions.
-
-On an empty tmux server, restore creates sessions in the saved order. If the
-server already has sessions, restore leaves them untouched and preserves the
-saved relative order among sessions it creates. Tmux cannot reassign existing
-session IDs, so restore cannot reproduce the full saved order around sessions
-that were already present.
-
-## Git
-
-Run `gpg --list-secret-keys --keyid-format LONG`, pick the `[S]` key and add the full subkey fingerprint for a `.gitconfig.local` file in `./git/`:
-
-```sh
+```ini
 [user]
 signingkey = 123abc...!
 ```
 
-The following block allows for a simple end-to-end test:
+Verify with a throwaway repository:
 
 ```sh
 tmp=$(mktemp -d)
@@ -220,132 +46,10 @@ git -C "$tmp" commit --allow-empty -S -m "test signing"
 git -C "$tmp" log --show-signature -1
 ```
 
-If it works, `git log --show-signature -1` should show a good GPG signature using the configured key.
+## Neovim
 
-## Neovim config
-
-- Easily validate new configs:
+Try the config without installing it:
 
 ```sh
-XDG_CONFIG_HOME=./nvim-0.11/ nvim nvim-0.11/nvim/init.lua
-```
-
-## Skills
-
-Install `jq` and GitHub CLI with its `gh skill` commands. Put
-`$HOME/.local/bin` on `PATH`, as for the other local tools in this repository.
-From the repository root, link locally authored skills and install the wrapper
-and its catalog with:
-
-```sh
-make stow-agents install-skills
-```
-
-`skills/catalog.json` is the editable source recipe. `make install-skills`
-refreshes the installed copy at `$HOME/.local/share/macos-dotfiles/skills/catalog.json`
-and copies `skills/overlays` next to it. The wrapper uses the checkout catalog
-when run directly as `./scripts/skills`; set `SKILLS_CATALOG` to use another
-JSON catalog. Run the installed `skills` command from any directory:
-
-```sh
-skills install unslop
-skills install --all
-skills install unslop --scope project
-```
-
-`agents/.agents/skills` holds only locally authored skills (currently
-`orchestrate` and `babysit`). `.gitignore` allowlists that directory; add
-a new authored skill to the allowlist. Upstream skills come only from
-`skills/catalog.json`.
-
-`make stow-agents` stows the `agents` package with `--no-folding`, except
-the authored skills, which it stows separately as one directory link each.
-Cursor CLI's `/` menu skips a `SKILL.md` symlink whose real path is outside
-the skills directory, so per-file links do not work there. The target also
-migrates earlier layouts (a folded `.agents` or `.agents/skills` link, or
-per-file skill links). This keeps edits to authored skills in the checkout
-while downloaded skills live outside it. Both kinds coexist:
-
-```text
-~/.agents/skills/        real directory
-  orchestrate/ -> <checkout>/agents/.agents/skills/orchestrate
-  babysit/     -> <checkout>/agents/.agents/skills/babysit
-  unslop/                downloaded catalog skill
-  code-review/           downloaded catalog skill
-```
-
-Installs go to `~/.agents/skills`, or the Git root's `.agents/skills` with
-`--scope project`. Codex and Cursor both read that directory, so one copy
-serves both. Every skill there is visible to both harnesses; to keep a skill
-out of automatic use, Cursor honors `disable-model-invocation: true` in
-`SKILL.md` and Codex honors `policy.allow_implicit_invocation: false` in
-`agents/openai.yaml` (add the latter through an overlay). User installs
-target the home directory. Project installs target the Git root's
-`.agents/skills`, even when you run the command from a subdirectory.
-Installs and updates require real `.agents` and `.agents/skills` directories.
-Links for locally authored skills are allowed alongside catalog installs;
-a link occupying a selected catalog name is refused. `--all` means the
-six names in the local catalog, not every skill in their upstream
-repositories.
-
-`skills install` only installs missing catalog skills and skips installed
-ones. `skills update` refreshes installed ones (skipping, with a notice,
-catalog skills that aren't installed for `--all`) and re-applies overlays.
-Removing an overlay directory and running `skills update NAME` removes its
-files.
-
-Neither command edits `skills/catalog.json`. `make install-skills` refreshes
-the installed catalog and wrapper; it does not download skills. After editing
-the catalog, run it again before using the installed `skills` command.
-To add new catalog entries and refresh existing installs, use:
-
-```sh
-make install-skills
-skills install --all
-skills update --all
-```
-
-Updates use the GitHub source metadata recorded at installation. Changing an
-existing catalog entry's repository or selector does not redirect an installed
-skill's update source; reinstall that skill to switch sources.
-
-`skills/overlays/<name>/` holds files added on top of an installed upstream
-skill when upstream does not ship them, such as `unslop`'s
-`agents/openai.yaml` for Codex. Never copy upstream files there. The wrapper
-tracks applied overlay paths in `.skills-overlay` inside the skill directory,
-re-applies them on update, and skips (with a warning) any overlay file that
-upstream starts shipping.
-
-The wrapper delegates to GitHub CLI. Installed directories retain upstream
-`SKILL.md`, optional `agents/openai.yaml`, supporting files, any license files
-included in those directories, and GitHub source metadata. Review changed
-upstream instructions when updating. Update catalog skills with the wrapper,
-not raw `gh skill update`, because GitHub CLI replaces the skill directory
-and drops overlay files:
-
-```sh
-skills update --all --dry-run
-skills update --all
-```
-
-The wrapper passes `--dir` for the selected scope. GitHub CLI resolves the
-latest release when available, otherwise the default branch head. Review the
-upstream changes. `gh skill list` shows the skills GitHub CLI finds in its
-known locations.
-
-Earlier checkouts linked upstream skills into `~/.agents/skills` through
-Stow. If `.agents` or `.agents/skills` is itself a directory symlink, first
-run `make stow-agents` from this checkout. After upstream skills were removed
-from the package, the leftover symlinks dangle, and the wrapper refuses to
-install over a symlinked skill
-directory. Remove the dangling links, then reinstall. The `orchestrate`
-and `babysit` links still resolve, so they are left in place. Also remove
-duplicate copies left in `~/.cursor/skills` by earlier Cursor-only installs (Cursor would
-otherwise see each skill twice), for example by deleting the catalog skill
-directories there.
-
-```sh
-make stow-agents
-find "$HOME/.agents/skills" -maxdepth 1 -type l ! -exec test -e {} \; -print -delete
-skills install --all
+XDG_CONFIG_HOME=./nvim/.config nvim nvim/.config/nvim/init.lua
 ```
