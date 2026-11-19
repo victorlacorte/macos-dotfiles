@@ -1,0 +1,5 @@
+interface:
+  display_name: "Reviewable PRs"
+  short_description: "Deliver new work as small, reviewable pull requests"
+policy:
+  allow_implicit_invocation: false
