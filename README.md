@@ -7,6 +7,7 @@ into `$HOME`. `agents` and `etc` have their own steps, see [Agents](docs/agents.
 ```sh
 stow --no --verbose --target=$HOME tmux   # dry run, then drop --no
 brew install pinentry-mac tree-sitter-cli fzf
+brew install --cask font-jetbrains-mono   # the font ghostty/ is configured with
 ```
 
 ## Local tools

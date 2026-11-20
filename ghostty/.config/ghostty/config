@@ -1,5 +1,9 @@
 # https://ghostty.org/docs/config/reference
 font-family = JetBrains Mono NL
+# JetBrains Mono lacks the Unicode space characters (e.g. U+2002, which fzf-lua
+# uses as a separator, and U+202F, which macOS puts in screenshot filenames), and
+# the automatic fallback renders them as placeholder glyphs. Menlo has them.
+font-codepoint-map = U+2000-U+200A,U+202F,U+205F=Menlo
 # font-feature = -liga
 # font-feature = -calt
 font-size = 16
