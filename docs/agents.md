@@ -7,14 +7,12 @@ make stow-agents
 ```
 
 This stows `agents/` into `$HOME` with `--no-folding` (Claude status line,
-Cursor hooks and rules, Codex `AGENTS.md`, shared `AGENTS.md`), so harness
+Cursor rules, Codex `AGENTS.md`, shared `AGENTS.md`), so harness
 directories such as `~/.claude` and `~/.cursor` stay real.
 
-The authored skills (`orchestrate`, `babysit`, `reviewable-prs`) and the
-`orchestrate-journal` analyzer live in a separate skills repository, which
-links them into `~/.agents/skills` and `~/.claude/skills`. The Cursor hook in
-`agents/.cursor/hooks.json` runs
-`$HOME/.agents/skills/orchestrate/hooks/cursor-journal.sh` from that install.
+The authored skills (`orchestrate`, `dispatch`, `babysit`, `reviewable-prs`)
+live in a separate skills repository, which links them into `~/.agents/skills`
+and `~/.claude/skills`.
 
 ## Codex system config
 

@@ -449,11 +449,11 @@ if command -v stow >/dev/null 2>&1; then
   expect_status 0 make -s -C "$repo_root" stow-agents HOME="$stow_home"
   [ -d "$stow_home/.cursor" ] && [ ! -L "$stow_home/.cursor" ] \
     || fail_test 'u: .cursor directory folded'
-  [ -L "$stow_home/.cursor/hooks.json" ] || fail_test 'u: hooks.json not linked'
+  [ -L "$stow_home/.cursor/rules/plan-format.mdc" ] || fail_test 'u: Cursor rule not linked'
   [ -L "$stow_home/.agents/skills/local-dir" ] || fail_test 'u: local skill link replaced'
   # Restowing is idempotent.
   expect_status 0 make -s -C "$repo_root" stow-agents HOME="$stow_home"
-  [ -L "$stow_home/.cursor/hooks.json" ] || fail_test 'u: hooks.json not linked after restow'
+  [ -L "$stow_home/.cursor/rules/plan-format.mdc" ] || fail_test 'u: Cursor rule not linked after restow'
 else
   printf 'SKIP: Stow integration test (stow is not installed)\n'
 fi
