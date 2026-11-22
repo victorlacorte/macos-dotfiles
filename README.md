@@ -16,7 +16,6 @@ Go 1.22 or newer is required. From the repository root:
 
 ```sh
 make install-agent-picker install-tmux-snapshot   # into ~/.local/bin
-make install-orchestrate-journal                  # needs Node, links the checkout
 make test
 ```
 
@@ -25,7 +24,7 @@ Binaries are local build artifacts. Re-run the targets after updating.
 ## Guides
 
 - [Tmux](docs/tmux.md): sessionizer, agent picker (`prefix u`), snapshots.
-- [Agents](docs/agents.md): Codex system config, shared skills, `skills` wrapper.
+- [Agents](docs/agents.md): Codex system config, catalog skills, `skills` wrapper.
 - [YubiKey](docs/yubikey.md): PIN management with `ykman`.
 
 ## Git signing

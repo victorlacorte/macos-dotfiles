@@ -15,7 +15,6 @@ install adds missing catalog skills; installed skills are skipped.
 update refreshes installed catalog skills and re-applies overlays;
   --all skips catalog skills that are not installed.
 Locally authored skills can be linked alongside catalog skills.
-For Stow setup or migration, run 'make stow-agents' from the checkout.
 EOF
 }
 
@@ -200,13 +199,10 @@ else
   destination=$HOME/.agents/skills
 fi
 
-# Both directories must be real: a folded .agents link also writes into the
-# Stow package, even when .agents/skills itself is not a symlink.
+# Both directories must be real: through a folded .agents link, installs would
+# write into the link's target, even when .agents/skills itself is not a symlink.
 for shared_dir in "${destination%/skills}" "$destination"; do
   if [ -L "$shared_dir" ]; then
-    if [ "$scope" = user ]; then
-      fail "shared skills path '$shared_dir' is a symlink; from the macos-dotfiles checkout run 'make stow-agents' to create real directories while keeping local skills linked"
-    fi
     fail "shared skills path '$shared_dir' is a symlink; use real .agents and .agents/skills directories, with links only for locally authored skills"
   fi
 done

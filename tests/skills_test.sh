@@ -421,7 +421,8 @@ for level in skills agents; do
     # shellcheck disable=SC2086 # Split these fixed test arguments.
     "$skills" $operation >"$out" 2>"$err" || got=$?
     [ "$got" -eq 2 ] || fail_test "s: $level/$operation expected exit 2, got $got"
-    grep -q 'make stow-agents' "$err" || fail_test 's: missing migration command'
+    grep -q 'use real .agents and .agents/skills directories' "$err" \
+      || fail_test 's: missing layout guidance'
     [ ! -s "$GH_LOG" ] || fail_test 's: gh invoked through a shared directory link'
     expect_file "$linked_package/skills/keep" untouched
     [ ! -e "$linked_package/skills/alpha" ] || fail_test 's: installed into Stow package'
@@ -440,48 +441,21 @@ grep -q 'use real .agents and .agents/skills directories' "$err" \
   || fail_test 't: missing project layout guidance'
 [ ! -s "$GH_LOG" ] || fail_test 't: gh invoked through a project directory link'
 
-printf 'u. make stow-agents migrates earlier layouts and coexists with catalog skills\n'
+printf 'u. make stow-agents links files and leaves skill links alone\n'
 if command -v stow >/dev/null 2>&1; then
-  for level in skills agents files; do
-    stow_home=$tmpdir/stow-home-$level
-    mkdir -p "$stow_home"
-    case $level in
-      skills)
-        mkdir -p "$stow_home/.agents"
-        stow --dir="$repo_root" --target="$stow_home" agents
-        [ -L "$stow_home/.agents/skills" ] || fail_test 'u: fixture skills directory not folded'
-        ;;
-      agents)
-        stow --dir="$repo_root" --target="$stow_home" agents
-        [ -L "$stow_home/.agents" ] || fail_test 'u: fixture agents directory not folded'
-        ;;
-      files)
-        stow --dir="$repo_root" --no-folding --target="$stow_home" agents
-        [ -L "$stow_home/.agents/skills/orchestrate/SKILL.md" ] \
-          || fail_test 'u: fixture authored skill not linked per file'
-        ;;
-    esac
-    expect_status 0 make -s -C "$repo_root" stow-agents HOME="$stow_home"
-    [ ! -L "$stow_home/.agents" ] || fail_test 'u: agents directory still folded'
-    [ ! -L "$stow_home/.agents/skills" ] || fail_test 'u: skills directory still folded'
-    local_skill_dir=$stow_home/.agents/skills/orchestrate
-    local_skill=$local_skill_dir/SKILL.md
-    [ -L "$local_skill_dir" ] || fail_test 'u: authored skill directory is not linked'
-    [ ! -L "$local_skill" ] || fail_test 'u: authored SKILL.md is a file link'
-    : > "$GH_LOG"
-    expect_status 0 env HOME="$stow_home" "$skills" install --all
-    expect_status 0 env HOME="$stow_home" "$skills" update --all
-    expect_file "$stow_home/.agents/skills/alpha/SKILL.md" updated
-    expect_file "$stow_home/.agents/skills/beta/SKILL.md" updated
-    [ -L "$local_skill_dir" ] || fail_test 'u: catalog operation replaced local link'
-    cmp "$local_skill" "$repo_root/agents/.agents/skills/orchestrate/SKILL.md" \
-      || fail_test 'u: authored skill changed'
-    # Restowing must also preserve catalog skills that are already installed.
-    expect_status 0 make -s -C "$repo_root" stow-agents HOME="$stow_home"
-    expect_file "$stow_home/.agents/skills/alpha/SKILL.md" updated
-  done
+  stow_home=$tmpdir/stow-home
+  mkdir -p "$stow_home/.agents/skills"
+  ln -s "$authored" "$stow_home/.agents/skills/local-dir"
+  expect_status 0 make -s -C "$repo_root" stow-agents HOME="$stow_home"
+  [ -d "$stow_home/.cursor" ] && [ ! -L "$stow_home/.cursor" ] \
+    || fail_test 'u: .cursor directory folded'
+  [ -L "$stow_home/.cursor/hooks.json" ] || fail_test 'u: hooks.json not linked'
+  [ -L "$stow_home/.agents/skills/local-dir" ] || fail_test 'u: local skill link replaced'
+  # Restowing is idempotent.
+  expect_status 0 make -s -C "$repo_root" stow-agents HOME="$stow_home"
+  [ -L "$stow_home/.cursor/hooks.json" ] || fail_test 'u: hooks.json not linked after restow'
 else
-  printf 'SKIP: Stow migration integration test (stow is not installed)\n'
+  printf 'SKIP: Stow integration test (stow is not installed)\n'
 fi
 
 printf 'ok\n'

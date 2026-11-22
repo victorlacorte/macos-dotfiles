@@ -7,12 +7,14 @@ make stow-agents
 ```
 
 This stows `agents/` into `$HOME` with `--no-folding` (Claude status line,
-Cursor hooks and rules, Codex `AGENTS.md`, shared `AGENTS.md`). Authored skills
-are stowed separately, one directory link each, into both `~/.agents/skills`
-and `~/.claude/skills`. Cursor's `/` menu skips a `SKILL.md` symlink whose real
-path is outside the skills directory, so per-file links do not work. The target
-also migrates earlier layouts (a folded `.agents` or `.agents/skills` link, or
-per-file skill links).
+Cursor hooks and rules, Codex `AGENTS.md`, shared `AGENTS.md`), so harness
+directories such as `~/.claude` and `~/.cursor` stay real.
+
+The authored skills (`orchestrate`, `babysit`, `reviewable-prs`) and the
+`orchestrate-journal` analyzer live in a separate skills repository, which
+links them into `~/.agents/skills` and `~/.claude/skills`. The Cursor hook in
+`agents/.cursor/hooks.json` runs
+`$HOME/.agents/skills/orchestrate/hooks/cursor-journal.sh` from that install.
 
 ## Codex system config
 
@@ -49,15 +51,13 @@ skills install unslop --scope project
 Layout of `~/.agents/skills`, a real directory read by Codex and Cursor:
 
 ```text
-orchestrate/ -> <checkout>/agents/.agents/skills/orchestrate   authored
-babysit/     -> <checkout>/agents/.agents/skills/babysit       authored
-reviewable-prs/ -> <checkout>/agents/.agents/skills/reviewable-prs authored
-unslop/                                                        downloaded
+orchestrate/ -> <skills>/packages/orchestration/orchestrate   authored, linked
+unslop/                                                       downloaded
 ```
 
-- Authored skills live in `agents/.agents/skills` and are tracked as-is.
-  Upstream skills never go there: they come only from `skills/catalog.json`
-  and install into `~/.agents/skills`.
+- Upstream skills come only from `skills/catalog.json` and install into
+  `~/.agents/skills`. Authored skills are linked there from their own
+  repository, never installed by this wrapper.
 - `skills/catalog.json` is the source recipe. `make install-skills` copies the
   wrapper, catalog, and `skills/overlays` into `~/.local`; it downloads nothing.
   Re-run it after editing the catalog. `SKILLS_CATALOG` selects another
@@ -87,22 +87,13 @@ automatic use, set `disable-model-invocation: true` in `SKILL.md` (Cursor) or
 
 ### Migrating from Stow-linked upstream skills
 
-Earlier checkouts linked upstream skills through Stow. If `.agents` or
-`.agents/skills` is a directory symlink, run `make stow-agents` first, then
-remove dangling links and reinstall. Also delete duplicate catalog skills left
-in `~/.cursor/skills`, which Cursor would otherwise list twice.
+Earlier checkouts linked skills through Stow. If `.agents` or `.agents/skills`
+is a directory symlink, replace it with a real directory, relink the authored
+skills from the skills repository, then remove dangling links and reinstall.
+Also delete duplicate catalog skills left in `~/.cursor/skills`, which Cursor
+would otherwise list twice.
 
 ```sh
-make stow-agents
 find "$HOME/.agents/skills" -maxdepth 1 -type l ! -exec test -e {} \; -print -delete
 skills install --all
-```
-
-## Orchestration journals
-
-`make install-orchestrate-journal` links `tools/orchestrate-journal/src/cli.ts`
-as `~/.local/bin/orchestrate-journal`:
-
-```sh
-orchestrate-journal analyze [--json] [--cursor-dir DIR] journal.jsonl...
 ```
