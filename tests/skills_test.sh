@@ -141,7 +141,7 @@ expect_file() {
 }
 
 reset_home() {
-  rm -rf "$HOME/.agents" "$HOME/.cursor"
+  rm -rf "$HOME/.agents" "$HOME/.cursor" "$HOME/.claude"
   mkdir -p "$HOME/.agents/skills" "$HOME/.cursor/skills"
   : > "$GH_LOG"
   unset STUB_UPSTREAM_FILE
@@ -457,5 +457,70 @@ if command -v stow >/dev/null 2>&1; then
 else
   printf 'SKIP: Stow integration test (stow is not installed)\n'
 fi
+
+claude_root=$HOME/.claude/skills
+
+expect_claude_link() {
+  link=$claude_root/$1
+  [ -L "$link" ] || fail_test "$2: $link is not a symlink"
+  got=$(readlink "$link")
+  [ "$got" = "../../.agents/skills/$1" ] || fail_test "$2: $link points to '$got'"
+  [ -f "$link/SKILL.md" ] || fail_test "$2: $link does not resolve to a skill"
+}
+
+printf 'v. install links catalog skills for Claude Code\n'
+reset_overlays
+reset_home
+expect_status 0 "$skills" install --all
+expect_claude_link alpha v
+expect_claude_link beta v
+
+printf 'w. install of an installed skill repairs its Claude Code link\n'
+reset_overlays
+reset_home
+expect_status 0 "$skills" install alpha
+rm "$claude_root/alpha"
+: > "$GH_LOG"
+expect_status 0 "$skills" install alpha
+expect_claude_link alpha w
+[ ! -s "$GH_LOG" ] || fail_test "w: gh was invoked: $(cat "$GH_LOG")"
+
+printf 'x. update keeps links, removes stale ones, and dry-run links nothing\n'
+reset_overlays
+reset_home
+expect_status 0 "$skills" install alpha
+ln -s ../../.agents/skills/gone "$claude_root/gone"
+rm "$claude_root/alpha"
+expect_status 0 "$skills" update alpha --dry-run
+[ ! -e "$claude_root/alpha" ] || fail_test 'x: dry-run linked alpha'
+expect_status 0 "$skills" update alpha
+expect_claude_link alpha x
+[ ! -L "$claude_root/gone" ] || fail_test 'x: stale link kept'
+
+printf 'y. foreign Claude Code entries are left alone and reported\n'
+reset_overlays
+reset_home
+mkdir -p "$claude_root/alpha"
+ln -s "$authored" "$claude_root/beta"
+got=0
+"$skills" install --all 2>"$err" || got=$?
+[ "$got" -eq 1 ] || fail_test "y: expected exit 1, got $got"
+[ -d "$claude_root/alpha" ] && [ ! -L "$claude_root/alpha" ] || fail_test 'y: real directory replaced'
+[ "$(readlink "$claude_root/beta")" = "$authored" ] || fail_test 'y: foreign link replaced'
+[ "$(grep -c 'skipped' "$err")" -eq 2 ] || fail_test "y: expected 2 skip notices: $(cat "$err")"
+expect_file "$alpha_dir/SKILL.md" upstream
+
+printf 'z. project scope links into the git root .claude/skills\n'
+reset_overlays
+reset_home
+rm -rf "$project_phys/.agents" "$project_phys/.claude"
+(
+  CDPATH='' cd -- "$project_phys/sub" || exit 1
+  expect_status 0 "$skills" install alpha --scope project
+)
+[ "$(readlink "$project_phys/.claude/skills/alpha")" = ../../.agents/skills/alpha ] \
+  || fail_test 'z: project link missing'
+expect_file "$project_phys/.claude/skills/alpha/SKILL.md" upstream
+[ ! -e "$claude_root/alpha" ] || fail_test 'z: linked into home'
 
 printf 'ok\n'

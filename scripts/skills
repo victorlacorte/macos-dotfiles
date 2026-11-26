@@ -15,6 +15,8 @@ install adds missing catalog skills; installed skills are skipped.
 update refreshes installed catalog skills and re-applies overlays;
   --all skips catalog skills that are not installed.
 Locally authored skills can be linked alongside catalog skills.
+Installed catalog skills are also linked into the sibling .claude/skills
+  directory, which Claude Code reads instead of .agents/skills.
 EOF
 }
 
@@ -95,6 +97,55 @@ apply_overlay() {
   else
     rm -f "$_marker"
   fi
+}
+
+# link_claude_skills: Claude Code reads .claude/skills, not .agents/skills, so
+# each installed catalog skill gets a relative directory link there, next to
+# the .agents directory it points into. A link that already points into
+# .agents/skills is replaced; any other file, directory or link with the same
+# name is left alone and reported. Dangling links into .agents/skills (from
+# skills removed since) are deleted. Returns 1 when a name was skipped.
+link_claude_skills() {
+  _claude_root=${destination%/.agents/skills}/.claude/skills
+  _rel_prefix=../../.agents/skills
+  _status=0
+  if [ -L "$_claude_root" ] || [ -L "${_claude_root%/skills}" ]; then
+    printf "skills: '%s' or its parent is a symlink; not linking skills for Claude Code\n" "$_claude_root" >&2
+    return 1
+  fi
+  mkdir -p "$_claude_root"
+
+  for _link in "$_claude_root"/*; do
+    [ -L "$_link" ] || continue
+    case $(readlink "$_link") in
+      "$_rel_prefix"/*) [ -e "$_link" ] || { rm "$_link"; printf 'removed stale %s\n' "$_link"; } ;;
+    esac
+  done
+
+  for _name in $selected; do
+    [ -f "$destination/$_name/SKILL.md" ] || continue
+    _link=$_claude_root/$_name
+    _target=$_rel_prefix/$_name
+    if [ -L "$_link" ]; then
+      _current=$(readlink "$_link")
+      [ "$_current" = "$_target" ] && continue
+      case $_current in
+        "$_rel_prefix"/*) rm "$_link" ;;
+        *)
+          printf "skills: skipped %s: links to '%s', not this catalog skill\n" "$_link" "$_current" >&2
+          _status=1
+          continue
+          ;;
+      esac
+    elif [ -e "$_link" ]; then
+      printf 'skills: skipped %s: exists and is not a symlink\n' "$_link" >&2
+      _status=1
+      continue
+    fi
+    ln -s "$_target" "$_link"
+    printf 'linked %s -> %s\n' "$_link" "$_target"
+  done
+  return "$_status"
 }
 
 if [ "$#" -eq 1 ] && { [ "$1" = "--help" ] || [ "$1" = "-h" ]; }; then
@@ -252,6 +303,7 @@ if [ "$skills_cmd" = update ]; then
     for name in $names; do
       apply_overlay "$name" "$destination/$name"
     done
+    link_claude_skills || { [ "$gh_status" -ne 0 ] || gh_status=1; }
   fi
   exit "$gh_status"
 fi
@@ -266,3 +318,4 @@ for name in $names; do
   [ "$gh_status" -eq 0 ] || exit "$gh_status"
   apply_overlay "$name" "$skill_dir"
 done
+link_claude_skills

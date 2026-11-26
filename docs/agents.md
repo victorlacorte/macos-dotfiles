@@ -53,6 +53,18 @@ orchestrate/ -> <skills>/packages/orchestration/orchestrate   authored, linked
 unslop/                                                       downloaded
 ```
 
+Claude Code reads `~/.claude/skills`, not `~/.agents/skills`, so after each
+install or update the wrapper links every installed catalog skill there:
+
+```text
+~/.claude/skills/unslop -> ../../.agents/skills/unslop
+```
+
+`install` also repairs missing links for skills that are already installed, and
+links into `.agents/skills` whose target is gone are removed. A real directory
+or a link elsewhere with a catalog skill's name is left alone and reported.
+Project scope does the same in the Git root's `.claude/skills`.
+
 - Upstream skills come only from `skills/catalog.json` and install into
   `~/.agents/skills`. Authored skills are linked there from their own
   repository, never installed by this wrapper.
